@@ -1,0 +1,9 @@
+.DS_Store
+data/PB_30W_RGB/
+img/extract/
+img/origvels/
+img/predvels/
+img/stats/
+src/__pycache__/
+src/BubblePINN*
+vid/

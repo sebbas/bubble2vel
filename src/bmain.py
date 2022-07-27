@@ -133,13 +133,12 @@ bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 bubbleNet.preview()
 
 ### Callbacks
-nsCB = [keras.callbacks.ModelCheckpoint(filepath='./'+modelName+'/checkpoint', \
-                                        monitor='val_loss', save_best_only=True,\
-                                        verbose=1),
-        keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.8, min_delta=0.01,\
-                                          patience=args.patience, min_lr=args.lrmin),
-        keras.callbacks.CSVLogger(modelName+'.log', append=True),
-        keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 10)]
+bubbleCB = [keras.callbacks.ModelCheckpoint(filepath='./' + modelName + '/checkpoint', \
+                                            monitor='val_loss', save_best_only=True,\
+                                            verbose=1),
+            keras.callbacks.ReduceLROnPlateau(monitor='loss', min_delta=0.01,\
+                                              patience=args.patience, min_lr=args.lrmin),
+            keras.callbacks.CSVLogger(modelName+'.log', append=True)]
 
 ### Load checkpoints if restart
 if args.restart:
@@ -149,11 +148,15 @@ if args.restart:
     keras.backend.set_value(bubbleNet.optimizer.learning_rate, args.restartLr)
 
 ### Training
-bubbleNet.fit(trainGen, validation_data=validGen,
-          initial_epoch=args.initTrain, epochs=args.nEpoch,
-          steps_per_epoch=nTrain//args.batchSize,
-          validation_steps=nValid//args.batchSize,
-          verbose=2, callbacks=nsCB)
+bubbleNet.fit(
+      trainGen,
+      initial_epoch=args.initTrain,
+      epochs=args.nEpoch,
+      steps_per_epoch=nTrain//args.batchSize,
+      validation_data=validGen,
+      validation_steps=nValid//args.batchSize,
+      verbose=True,
+      callbacks=bubbleCB)
 #bubbleNet.summary()
 
 ### Loss plot

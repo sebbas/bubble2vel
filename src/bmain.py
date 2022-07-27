@@ -120,8 +120,8 @@ normalizeXyt = True
 onlyFluid = not args.plotDomain
 
 ### Generators
-trainGen = dataSet.generateTrainValPts(0, nTrain, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
-validGen = dataSet.generateTrainValPts(nTrain, nSamples, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
+trainGen = dataSet.generate_trainval_pts(0, nTrain, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
+validGen = dataSet.generate_trainval_pts(nTrain, nSamples, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
 
 ### Create model
 modelName = args.name + archStr + '_c{}'.format(args.nColPoint)
@@ -170,7 +170,7 @@ size    = dataSet.get_size()
 
 predStart, predEnd = 0, args.predictionFrames
 predVels = None
-predGen = dataSet.generatePredictPts(predStart, predEnd, onlyFluid=onlyFluid)
+predGen = dataSet.generate_predict_pts(predStart, predEnd, onlyFluid=onlyFluid)
 predVels = bubbleNet.predict(predGen)
 
 nExpectedPred = dataSet.get_num_fluid(0, args.predictionFrames) if onlyFluid else dataSet.get_num_cells() * args.predictionFrames

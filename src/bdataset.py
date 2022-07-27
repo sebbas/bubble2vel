@@ -127,7 +127,7 @@ class BubbleDataSet:
     print('--------------------------------')
 
 
-  def generatePredictPts(self, begin, end, onlyFluid=True, normalizeXyt=True):
+  def generate_predict_pts(self, begin, end, onlyFluid=True, normalizeXyt=True):
       print('Generating prediction points')
       sizeX, sizeY = self.size
 
@@ -158,7 +158,7 @@ class BubbleDataSet:
         yield [xy, t, w], label
 
 
-  def generateTrainValPts(self, begin, end, loop=True, normalizeXyt=True, batchSize=64):
+  def generate_trainval_pts(self, begin, end, loop=True, normalizeXyt=True, batchSize=64):
     print('Generating training points')
     sizeX, sizeY = self.size
     rng = np.random.default_rng(2022)

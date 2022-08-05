@@ -47,6 +47,10 @@ class BubbleDataSet:
     self.bcDomain = None # [nSamples, dim]
     self.xyDomain = None # [nSamples, dim + 1]
     self.xyCol    = None # [nColPnt,  dim + 1]
+    # Arrays to store (shuffled) mix of data and collocation points
+    self.labels   = None
+    self.xyt      = None
+    self.w        = None
 
 
   def load_data(self, normalize=True, shuffle=True):
@@ -158,9 +162,8 @@ class BubbleDataSet:
         yield [xy, t, w], label
 
 
-  def generate_trainval_pts(self, begin, end, loop=True, normalizeXyt=True, batchSize=64):
-    print('Generating training points')
-    sizeX, sizeY = self.size
+  def combine_data_colloc_points(self):
+    print('Combine data and collocation points.')
     rng = np.random.default_rng(2022)
     colPntLabel = 0.0 # Label for collocation points
 
@@ -177,9 +180,13 @@ class BubbleDataSet:
 
     # Shuffle the combined arrays from above. Shuffle all arrays with same permutation!
     p = np.random.permutation(len(bcSamples))
-    shuffledBc  = bcSamples[p]
-    shuffledXyt = xytSamples[p]
-    shuffledW   = wSamples[p]
+    self.labels  = bcSamples[p]
+    self.xyt     = xytSamples[p]
+    self.w       = wSamples[p]
+
+
+  def generate_trainval_pts(self, begin, end, loop=True, normalizeXyt=True, batchSize=64):
+    print('Generating training points. Begin {}, end {}'.format(begin, end))
 
     # Arrays to store batches
     label = np.zeros((batchSize, self.dim),  dtype=float)
@@ -194,10 +201,10 @@ class BubbleDataSet:
         batchBegin = begin
         s = 0
       # Fill batch arrays
-      label[:, :] = shuffledBc[s:s+batchSize, :]
-      xy[:, :]    = shuffledXyt[s:s+batchSize, :self.dim]
-      t[:, 0]     = shuffledXyt[s:s+batchSize, self.dim]
-      w[:, 0]     = shuffledW[s:s+batchSize, 0]
+      label[:, :] = self.labels[s:s+batchSize, :]
+      xy[:, :]    = self.xyt[s:s+batchSize, :self.dim]
+      t[:, 0]     = self.xyt[s:s+batchSize, self.dim]
+      w[:, 0]     = self.w[s:s+batchSize, 0]
       s += batchSize
       batchBegin += batchSize
 
@@ -312,7 +319,6 @@ class BubbleDataSet:
       # Velocity magnitude per cell
       mag = np.sqrt(self.vel[frame,:,:,0] ** 2 + self.vel[frame,:,:,1] ** 2)
 
-      
       cornerCells = [(0,0), (0,sizeY-1), (sizeX-1,sizeY-1), (sizeX-1,0)]
       # Initialize flood-fill search with corner cells of grid
       for i, j in cornerCells:

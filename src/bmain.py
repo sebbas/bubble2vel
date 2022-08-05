@@ -119,6 +119,8 @@ assert nValid > 0, 'Number of validation samples must be greater than 0'
 normalizeXyt = True
 onlyFluid = not args.plotDomain
 
+dataSet.combine_data_colloc_points()
+
 ### Generators
 trainGen = dataSet.generate_trainval_pts(0, nTrain, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
 validGen = dataSet.generate_trainval_pts(nTrain, nSamples, normalizeXyt=normalizeXyt, batchSize=args.batchSize)

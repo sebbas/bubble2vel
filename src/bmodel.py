@@ -88,15 +88,15 @@ class BubblePINN(keras.Model):
         tape1.watch(xy)
         tape1.watch(t)
         uvPred = self([xy, t])
-        u      = uvPred[:,0]
-        v      = uvPred[:,1]
+        uPred  = uvPred[:,0]
+        vPred  = uvPred[:,1]
       # 1st order derivatives
-      u_x = tape1.gradient(u, xy)[:,0]
-      u_y = tape1.gradient(u, xy)[:,1]
-      v_x = tape1.gradient(v, xy)[:,0]
-      v_y = tape1.gradient(v, xy)[:,1]
-      u_t = tape1.gradient(u,  t)
-      v_t = tape1.gradient(v,  t)
+      u_x = tape1.gradient(uPred, xy)[:,0]
+      u_y = tape1.gradient(uPred, xy)[:,1]
+      v_x = tape1.gradient(vPred, xy)[:,0]
+      v_y = tape1.gradient(vPred, xy)[:,1]
+      u_t = tape1.gradient(uPred,  t)
+      v_t = tape1.gradient(vPred,  t)
       del tape1
     # 2nd order derivatives
     u_xx = tape2.gradient(u_x, xy)[:,0]
@@ -107,18 +107,20 @@ class BubblePINN(keras.Model):
 
     # Compute data loss
     w = tf.squeeze(w)
-    nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMse  = tf.reduce_sum(w * tf.square(u - uv[:,0])) / nDataPoint
-    vMse  = tf.reduce_sum(w * tf.square(v - uv[:,1])) / nDataPoint
-    # pde error, 0 continuity, 1-2 NS
+    w.set_shape([None])
+    uMse = keras.losses.mean_squared_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
+    vMse = keras.losses.mean_squared_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvPred[:,1],w))
+
+    # Compute pde loss, 0 continuity, 1-2 NS
     ww      = 1.0 - w
-    nPdePoint = tf.reduce_sum(ww) + 1.0e-10
+    kinVisc = 0.002
     pde0    = u_x + v_y
-    pde1    = u_t + u*u_x + v*u_y - (u_xx + u_yy)/250.0
-    pde2    = v_t + u*v_x + v*v_y - (v_xx + v_yy)/250.0
-    pdeMse0 = tf.reduce_sum(tf.square(pde0) * ww) / nPdePoint
-    pdeMse1 = tf.reduce_sum(tf.square(pde1) * ww) / nPdePoint
-    pdeMse2 = tf.reduce_sum(tf.square(pde2) * ww) / nPdePoint
+    pde1    = u_t + uPred*u_x + vPred*u_y - (u_xx + u_yy)*kinVisc
+    pde2    = v_t + uPred*v_x + vPred*v_y - (v_xx + v_yy)*kinVisc
+    ww.set_shape([None])
+    pdeMse0 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde0,ww))
+    pdeMse1 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde1,ww))
+    pdeMse2 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde2,ww))
 
     return uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2
 
@@ -160,9 +162,9 @@ class BubblePINN(keras.Model):
     self.trainMetrics['pde1'].update_state(pdeMse1)
     self.trainMetrics['pde2'].update_state(pdeMse2)
     w = tf.squeeze(w)
-    nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMae = tf.reduce_sum(tf.abs((uvPred[:,0] - uv[:,0]) * w))/nDataPoint
-    vMae = tf.reduce_sum(tf.abs((uvPred[:,1] - uv[:,1]) * w))/nDataPoint
+    w.set_shape([None])
+    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
+    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvPred[:,1],w))
     self.trainMetrics['uMae'].update_state(uMae)
     self.trainMetrics['vMae'].update_state(vMae)
     # track gradients coefficients
@@ -197,9 +199,9 @@ class BubblePINN(keras.Model):
     self.validMetrics['pde1'].update_state(pdeMse1)
     self.validMetrics['pde2'].update_state(pdeMse2)
     w = tf.squeeze(w)
-    nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMae = tf.reduce_sum(tf.abs((uvPred[:,0] - uv[:,0]) * w))/nDataPoint
-    vMae = tf.reduce_sum(tf.abs((uvPred[:,1] - uv[:,1]) * w))/nDataPoint
+    w.set_shape([None])
+    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
+    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvPred[:,1],w))
     self.validMetrics['uMae'].update_state(uMae)
     self.validMetrics['vMae'].update_state(vMae)
 

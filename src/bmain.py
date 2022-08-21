@@ -104,6 +104,7 @@ if not args.cachedInput:
   dataSet.summary()
 else:
   dataSet.restore(args.file)
+dataSet.combine_data_colloc_points()
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(nDim)
@@ -118,8 +119,6 @@ assert nValid > 0, 'Number of validation samples must be greater than 0'
 
 normalizeXyt = True
 onlyFluid = not args.plotDomain
-
-dataSet.combine_data_colloc_points()
 
 ### Generators
 trainGen = dataSet.generate_trainval_pts(0, nTrain, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
@@ -137,7 +136,7 @@ bubbleNet.preview()
 ### Callbacks
 bubbleCB = [keras.callbacks.ModelCheckpoint(filepath='./' + modelName + '/checkpoint', \
                                             monitor='val_loss', save_best_only=True,\
-                                            verbose=1),
+                                            save_weights_only=True, verbose=1),
             keras.callbacks.ReduceLROnPlateau(monitor='loss', min_delta=0.01,\
                                               patience=args.patience, min_lr=args.lrmin),
             keras.callbacks.CSVLogger(modelName+'.log', append=True)]

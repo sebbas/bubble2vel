@@ -11,7 +11,7 @@ from tensorflow.keras.layers import Dense
 
 
 class DenseLayers(keras.layers.Layer):
-  def __init__(self, width=[64,64,64], act='tanh', prefix='dense_',
+  def __init__(self, width=[64,64,64], act='relu', prefix='dense_',
                reg=None, last_linear=False, **kwargs):
     super(DenseLayers, self).__init__(**kwargs)
     assert len(width) > 0

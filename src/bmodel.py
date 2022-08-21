@@ -24,9 +24,9 @@ class BubblePINN(keras.Model):
     self.width = width
     self.reg   = reg
     if reg == None:
-      self.mlp = DenseLayers(width=width, prefix='bc')
+      self.mlp = DenseLayers(width=width, prefix='bc', last_linear=True)
     else:
-      self.mlp = DenseLayers(width=width, reg=reg, prefix='bc')
+      self.mlp = DenseLayers(width=width, reg=reg, prefix='bc', last_linear=True)
     # Coefficient for data and pde loss
     self.alpha = alpha
     self.beta  = beta

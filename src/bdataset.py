@@ -216,8 +216,9 @@ class BubbleDataSet:
       yield [xy, t, w], label
 
 
-  # Define solid domain borders: walls = [left, top, right, bottom]
-  def extract_domain_bc(self, walls=[False, False, False, True]):
+
+  # Define solid domain borders: walls = [top, right, bottom, left]
+  def extract_domain_bc(self, walls):
     print('Extract domain boundary')
 
     bcFrameLst = [] # Domain boundary condition for every frame
@@ -236,28 +237,28 @@ class BubbleDataSet:
         if UTIL.PRINT_DEBUG: print('Warning frame %d: All domain walls open. Returning early' % frame)
         return
 
-      # Left domain border
+      # Top domain wall
       if walls[0]:
         x = np.full((sizeY-2,), 0, dtype=int)
         y = np.linspace(1, sizeY-2, num=sizeY-2, dtype=int)
         bcLst.extend(np.full((sizeY-2,self.dim), bcCondition)) #, dtype=int))
         xyLst.extend(list(zip(x,y)))
 
-      # Top domain border
+      # Right domain wall
       if walls[1]:
         x = np.linspace(1, sizeX-2, num=sizeX-2, dtype=int)
         y = np.full((sizeX-2,), sizeX-1, dtype=int)
         bcLst.extend(np.full((sizeX-2,self.dim), bcCondition)) #, dtype=int))
         xyLst.extend(list(zip(x,y)))
 
-      # Right domain border
+      # Bottom domain wall
       if walls[2]:
         x = np.full((sizeY-2,), sizeY-1, dtype=int)
         y = np.linspace(1, sizeY-2, num=sizeY-2, dtype=int)[::-1]
         bcLst.extend(np.full((sizeY-2,self.dim), bcCondition)) #, dtype=int))
         xyLst.extend(list(zip(x,y)))
 
-      # Bottom domain border
+      # Left domain wall
       if walls[3]:
         x = np.linspace(1, sizeX-2, num=sizeX-2, dtype=int)[::-1]
         y = np.full((sizeX-2,), 0, dtype=int)
@@ -273,8 +274,8 @@ class BubbleDataSet:
       if Util.IMG_DEBUG:
         debugGrid = np.zeros((self.size), dtype=int)
         for x, y in xyLst:
-          debugGrid[y,x] = 1
-        Util.save_image(src=debugGrid, subdir='extract', name='domainPts_extract', frame=frame, origin='lower')
+          debugGrid[x,y] = 1
+        Util.save_image(src=debugGrid, subdir='extract', name='domainPts_extract', frame=frame, origin='upper')
 
     self.bcDomain = np.zeros((np.sum(self.nBcDomain), self.dim))
     self.xyDomain = np.zeros((np.sum(self.nBcDomain), self.dim + 1))

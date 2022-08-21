@@ -89,7 +89,7 @@ dataSet = BD.BubbleDataSet(args.file, args.totalFrames, args.nDataPoint, args.nB
 if not args.cachedInput:
   if not dataSet.load_data():
     sys.exit()
-  dataSet.extract_domain_bc(walls=[0,0,0,1])
+  dataSet.extract_domain_bc(walls=[0,0,1,0])
   dataSet.extract_bubble_bc(velEps=0.01)
   dataSet.extract_collocation_points()
   dataSet.save()

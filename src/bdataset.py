@@ -132,34 +132,34 @@ class BubbleDataSet:
 
 
   def generate_predict_pts(self, begin, end, onlyFluid=True, normalizeXyt=True):
-      print('Generating prediction points')
-      sizeX, sizeY = self.size
+    print('Generating prediction points')
+    sizeX, sizeY = self.size
 
-      for frame in range(begin, end):
-        gridXyt   = [(x,y,frame) for x in range(sizeX) for y in range(sizeY)]
-        #loopArray = self.xyFluid[:self.nFluid[frame], :] if onlyFluid else gridXyt
-        loopArray = self.get_xy_fluid(frame) if onlyFluid else gridXyt
-        tmpLst    = [pos for pos in loopArray]
-        nGridPnt  = len(tmpLst)
+    for frame in range(begin, end):
+      gridXyt   = [(x,y,frame) for x in range(sizeX) for y in range(sizeY)]
+      #loopArray = self.xyFluid[:self.nFluid[frame], :] if onlyFluid else gridXyt
+      loopArray = self.get_xy_fluid(frame) if onlyFluid else gridXyt
+      tmpLst    = [pos for pos in loopArray]
+      nGridPnt  = len(tmpLst)
 
-        # Arrays to store batches
-        xy    = np.zeros((nGridPnt, self.dim), dtype=float)
-        t     = np.zeros((nGridPnt, 1), dtype=float)
-        # Dummies, unused for pred pts
-        label = np.zeros((nGridPnt, self.dim),  dtype=float)
-        w     = np.zeros((nGridPnt, 1),         dtype=float)
+      # Arrays to store batches
+      xy    = np.zeros((nGridPnt, self.dim), dtype=float)
+      t     = np.zeros((nGridPnt, 1), dtype=float)
+      # Dummies, unused for pred pts
+      label = np.zeros((nGridPnt, self.dim),  dtype=float)
+      w     = np.zeros((nGridPnt, 1),         dtype=float)
 
-        # Fill batch arrays
-        tmpArr   = np.asarray(tmpLst, dtype=float)
-        xy[:, :] =  tmpArr[:, :self.dim]
-        t[:, 0]  = tmpArr[:, self.dim]
+      # Fill batch arrays
+      tmpArr   = np.asarray(tmpLst, dtype=float)
+      xy[:, :] =  tmpArr[:, :self.dim]
+      t[:, 0]  = tmpArr[:, self.dim]
 
-        # Normalization
-        if normalizeXyt:
-          xy[:,] /= self.size
-          t[:,] /= self.nTotalFrames
+      # Normalization
+      if normalizeXyt:
+        xy[:,] /= self.size
+        t[:,] /= self.nTotalFrames
 
-        yield [xy, t, w], label
+      yield [xy, t, w], label
 
 
   def combine_data_colloc_points(self):

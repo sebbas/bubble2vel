@@ -51,6 +51,8 @@ class BubbleDataSet:
     self.labels   = None
     self.xyt      = None
     self.w        = None
+    # Resolution of collocation points (only use every other points as col point)
+    self.colRes = 8
 
 
   def load_data(self, normalize=True, shuffle=True):
@@ -442,24 +444,28 @@ class BubbleDataSet:
 
 
   def extract_collocation_points(self):
-    print('Extract collocation points')
+    print('Extracting collocation points')
     rng = np.random.default_rng(2022)
 
     self.xyCol = np.zeros((self.nColPnt, self.dim + 1))
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
-    s, ss = 0, 0
+    s = 0
     for frame in range(self.nTotalFrames):
       Util.print_progress(frame, self.nTotalFrames)
 
       # Get all fluid coords for the current frame
       xyFluidFrame = self.get_xy_fluid(frame)
 
+      # Only use every other grid point (self.colRes == interval) as collocation point
+      mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
+      xyFluidFrameMasked = xyFluidFrame[mask]
+
       # Insert random selection of fluid coords into collocation array
-      indices = np.arange(0, self.nFluid[frame])
+      indices = np.arange(0, xyFluidFrameMasked.shape[0])
       randIndices = rng.choice(indices, size=nColPntPerFrame, replace=False)
-      ee = ss + nColPntPerFrame
-      self.xyCol[ss:ee, :] = xyFluidFrame[randIndices, :]
-      ss = ee
+      e = s + nColPntPerFrame
+      self.xyCol[s:e, :] = xyFluidFrameMasked[randIndices, :]
+      s = e
 
 
   def save(self, dir='../data/', filePrefix='bdata'):
@@ -471,7 +477,7 @@ class BubbleDataSet:
     nSampleDomain = np.sum(self.nBcDomain)
     nSampleCol = np.sum(self.nColPnt)
 
-    fname = os.path.join(dir, filePrefix + '_{}_{}.h5'.format(self.size[0], nSampleBc))
+    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}.h5'.format(self.size[0], nSampleBc, nSampleCol, self.colRes))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']      = self.size
     dFile.attrs['nColPnt']   = self.nColPnt

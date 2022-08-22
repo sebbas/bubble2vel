@@ -40,6 +40,8 @@ parser.add_argument('-alpha', '--alpha', type=float, nargs=3, default=[1.0, 1.0,
                     help='coefficients for data loss')
 parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-4, 1e-4, 1e-4],
                     help='coefficients for pde residual')
+parser.add_argument('-gamma', '--gamma', type=float, nargs=3, default=[1.0, 1.0, 1.0],
+                    help='coefficients for domain wall loss')
 
 # Points for data, boundary and unknown fluid areas
 parser.add_argument('-d', '--nDataPoint', type=int, default=1000,
@@ -105,17 +107,20 @@ args.architecture.append(nDim)
 nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()
 nValid   = int(nSamples * 0.1)
 nTrain   = nSamples - nValid
+# Split for domain wall points
+nSamplesW = dataSet.get_num_wall_pts()
+nValidW   = int(nSamplesW * 0.1)
+nTrainW   = nSamplesW - nValidW
 
-print('{} samples in training, {} in validation'.format(nTrain, nValid))
-assert nValid > 0, 'Number of validation samples must be greater than 0'
+print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
+print('{} domain wall points in training, {} in validation'.format(nTrainW, nValidW))
+assert nValid > 0 and nValidW > 0, 'Number of validation samples must be greater than 0'
 
-normalizeXyt = True
+# Generators
+trainGen = dataSet.generate_train_valid_batch(0, nTrain, 0, nTrainW, normalizeXyt=True, batchSize=args.batchSize)
+validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSamplesW, normalizeXyt=True, batchSize=args.batchSize)
 
-### Generators
-trainGen = dataSet.generate_trainval_pts(0, nTrain, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
-validGen = dataSet.generate_trainval_pts(nTrain, nSamples, normalizeXyt=normalizeXyt, batchSize=args.batchSize)
-
-### Create model
+# Create model
 modelName = args.name + archStr + '_c{}'.format(args.nColPoint)
 
 #with BM.strategy.scope():

@@ -50,7 +50,7 @@ class BubbleDataSet:
     # Arrays to store (shuffled) mix of data and collocation points
     self.labels   = None
     self.xyt      = None
-    self.w        = None
+    self.id       = None
     # Resolution of collocation points (only use every other points as col point)
     self.colRes = 8
 
@@ -175,48 +175,79 @@ class BubbleDataSet:
     xytSamples = np.concatenate((self.xyBc, self.xyCol))
     ones       = np.full((len(self.xyBc), 1), 1) # Indicates a data point
     zeros      = np.full((len(self.xyCol), 1), 0) # Indicates a collocation point
-    wSamples   = np.concatenate((ones, zeros))
+    idSamples   = np.concatenate((ones, zeros))
 
     assert len(bcSamples) == len(xytSamples)
-    assert len(bcSamples) == len(wSamples)
+    assert len(bcSamples) == len(idSamples)
 
-    # Shuffle the combined arrays from above. Shuffle all arrays with same permutation!
+    # Shuffle the combined point arrays. Shuffle all arrays with same permutation
     p = np.random.permutation(len(bcSamples))
     self.labels  = bcSamples[p]
     self.xyt     = xytSamples[p]
-    self.w       = wSamples[p]
+    self.id      = idSamples[p]
+
+    # Shuffle domain wall arrays
+    pp = np.random.permutation(len(self.xyDomain))
+    self.xyDomain = self.xyDomain[pp]
+    self.bcDomain = self.bcDomain[pp]
 
 
-  def generate_trainval_pts(self, begin, end, loop=True, normalizeXyt=True, batchSize=64):
-    print('Generating training points. Begin {}, end {}'.format(begin, end))
+  def generate_train_valid_batch(self, begin, end, beginW, endW, loop=True,
+                                 normalizeXyt=True, batchSize=64, shuffle=True):
+    generatorType = 'training' if begin == 0 else 'validation'
+    print('\nGenerating {} sample {} batch'.format(batchSize, generatorType))
 
-    # Arrays to store batches
-    label = np.zeros((batchSize, self.dim),  dtype=float)
-    xy    = np.zeros((batchSize, self.dim ), dtype=float)
-    t     = np.zeros((batchSize, 1),         dtype=float)
-    w     = np.zeros((batchSize, 1),         dtype=float)
+    # Arrays to store data + collocation point batch
+    label  = np.zeros((batchSize, self.dim), dtype=float)
+    xy     = np.zeros((batchSize, self.dim), dtype=float)
+    t      = np.zeros((batchSize, 1),        dtype=float)
+    id     = np.zeros((batchSize, 1),        dtype=float)
+    # Arrays to store domain wall batch
+    xyW    = np.zeros((batchSize, self.dim), dtype=float)
+    tW     = np.zeros((batchSize, 1),        dtype=float)
+    labelW = np.zeros((batchSize, self.dim), dtype=float)
 
-    batchBegin = begin
-    s = 0
+    s, sW = begin, beginW
     while True:
-      if batchBegin + batchSize > end:
-        batchBegin = begin
-        s = 0
+      if s + batchSize > end:
+        s = begin
+      if sW + batchSize > endW:
+        sW = beginW
       # Fill batch arrays
       label[:, :] = self.labels[s:s+batchSize, :]
       xy[:, :]    = self.xyt[s:s+batchSize, :self.dim]
       t[:, 0]     = self.xyt[s:s+batchSize, self.dim]
-      w[:, 0]     = self.w[s:s+batchSize, 0]
+      id[:, 0]    = self.id[s:s+batchSize, 0]
+
+      randInd = np.random.choice(self.xyDomain.shape[0], batchSize, replace=False)
+      xyW[:, :]    = self.xyDomain[randInd, :self.dim]
+      labelW[:, :] = self.bcDomain[randInd, :self.dim]
+
+      xyW[:, :]    = self.xyDomain[sW:sW+batchSize, :self.dim]
+      tW[:, 0]     = self.xyDomain[sW:sW+batchSize, self.dim]
+      labelW[:, :] = self.bcDomain[sW:sW+batchSize, :self.dim]
+
       s += batchSize
-      batchBegin += batchSize
 
       # Normalization
       if normalizeXyt:
-        xy[:,] /= self.size
-        t[:,] /= self.nTotalFrames
+        xy[:,]  /= self.size
+        t[:,]   /= self.nTotalFrames
+        xyW[:,] /= self.size
+        tW[:,]  /= self.nTotalFrames
 
-      yield [xy, t, w], label
+      # Shuffle batch
+      if shuffle:
+        assert len(xy) == batchSize
+        p      = np.random.permutation(batchSize)
+        xy     = xy[p]
+        t      = t[p]
+        id     = id[p]
+        label  = label[p]
+        xyW    = xyW[p]
+        labelW = labelW[p]
 
+      yield [xy, t, id, xyW, tW, labelW], label
 
 
   # Define solid domain borders: walls = [top, right, bottom, left]

@@ -18,7 +18,7 @@ strategy = tf.distribute.MirroredStrategy()
 
 class BubblePINN(keras.Model):
   def __init__(self, width=[256, 256, 256, 128, 128, 128, 64, 32, 2],\
-               alpha = [1.0, 1.0, 1.0], beta = [1e-4, 1e-4, 1e-4], \
+               alpha = [1.0, 1.0, 1.0], beta = [1e-4, 1e-4, 1e-4], gamma = [1.0, 1.0],\
                reg=None, saveGradStat=False, **kwargs):
     super(BubblePINN, self).__init__(**kwargs)
     self.width = width
@@ -30,6 +30,7 @@ class BubblePINN(keras.Model):
     # Coefficient for data and pde loss
     self.alpha = alpha
     self.beta  = beta
+    self.gamma = gamma
 
     # ---- dicts for metrics and statistics ---- #
     # Save gradients' statistics per layer
@@ -38,7 +39,7 @@ class BubblePINN(keras.Model):
     self.trainMetrics = {}
     self.validMetrics = {}
     # add metrics
-    names = ['loss', 'uMse', 'vMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae']
+    names = ['loss', 'uMse', 'vMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'uMseWalls', 'vMseWalls']
     for key in names:
       self.trainMetrics[key] = keras.metrics.Mean(name='train_'+key)
       self.validMetrics[key] = keras.metrics.Mean(name='valid_'+key)
@@ -46,7 +47,7 @@ class BubblePINN(keras.Model):
     ## i even for weights, odd for bias
     if self.saveGradStat:
       for i in range(len(width)):
-        for prefix in ['u_', 'v_', 'pde0_', 'pde1_', 'pde2_']:
+        for prefix in ['u_', 'v_', 'pde0_', 'pde1_', 'pde2_', 'uWalls_', 'vWalls_']:
           for suffix in ['w_avg', 'w_std', 'b_avg', 'b_std']:
             key = prefix + repr(i) + suffix
             self.trainMetrics[key] = keras.metrics.Mean(name='train '+key)
@@ -80,7 +81,7 @@ class BubblePINN(keras.Model):
         self.trainMetrics[prefix+'std'].update_state(gStd)
 
 
-  def compute_data_pde_losses(self, xy, t, w, uv):
+  def compute_losses(self, xy, t, w, uv, xyWalls, tWalls, uvWalls):
     # Track computation for 2nd derivatives for u, v
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
       tape2.watch(xy)
@@ -122,31 +123,43 @@ class BubblePINN(keras.Model):
     pdeMse1 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde1,ww))
     pdeMse2 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde2,ww))
 
-    return uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2
+    # Compute domain wall loss
+    uvWallsPred = self([xyWalls, tWalls])
+    uMseWalls = keras.losses.mean_squared_error(uvWalls[:,0], uvWallsPred[:,0])
+    vMseWalls = keras.losses.mean_squared_error(uvWalls[:,1], uvWallsPred[:,1])
+
+    return uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls
 
 
   def train_step(self, data):
-    xy   = data[0][0]
-    t    = data[0][1]
-    w    = data[0][2]
-    uv   = data[1]
+    xy       = data[0][0]
+    t        = data[0][1]
+    w        = data[0][2]
+    xyWalls  = data[0][3]
+    tWalls   = data[0][4]
+    bcDomain = data[0][5]
+    uv       = data[1]
 
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
-      uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2 = self.compute_data_pde_losses(xy, t, w, uv)
+      uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls = \
+        self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
       # replica's loss, divided by global batch size
       loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse
-              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2)
+              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2
+              + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls )
       loss += tf.add_n(self.losses)
       loss  = loss #/ strategy.num_replicas_in_sync
     # update gradients
     if self.saveGradStat:
-      uMseGrad    = tape0.gradient(uMse,    self.trainable_variables)
-      vMseGrad    = tape0.gradient(vMse,    self.trainable_variables)
-      pdeMse0Grad = tape0.gradient(pdeMse0, self.trainable_variables)
-      pdeMse1Grad = tape0.gradient(pdeMse1, self.trainable_variables)
-      pdeMse2Grad = tape0.gradient(pdeMse2, self.trainable_variables)
+      uMseGrad      = tape0.gradient(uMse,      self.trainable_variables)
+      vMseGrad      = tape0.gradient(vMse,      self.trainable_variables)
+      pdeMse0Grad   = tape0.gradient(pdeMse0,   self.trainable_variables)
+      pdeMse1Grad   = tape0.gradient(pdeMse1,   self.trainable_variables)
+      pdeMse2Grad   = tape0.gradient(pdeMse2,   self.trainable_variables)
+      uMseWallsGrad = tape0.gradient(uMseWalls, self.trainable_variables)
+      vMseWallsGrad = tape0.gradient(vMseWalls, self.trainable_variables)
     lossGrad = tape0.gradient(loss, self.trainable_variables)
     del tape0
 
@@ -161,6 +174,8 @@ class BubblePINN(keras.Model):
     self.trainMetrics['pde0'].update_state(pdeMse0)
     self.trainMetrics['pde1'].update_state(pdeMse1)
     self.trainMetrics['pde2'].update_state(pdeMse2)
+    self.trainMetrics['uMseWalls'].update_state(uMseWalls)
+    self.trainMetrics['vMseWalls'].update_state(vMseWalls)
     w = tf.squeeze(w)
     w.set_shape([None])
     uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
@@ -174,22 +189,29 @@ class BubblePINN(keras.Model):
       self.record_layer_gradient(pdeMse0Grad, 'pde0_')
       self.record_layer_gradient(pdeMse1Grad, 'pde1_')
       self.record_layer_gradient(pdeMse2Grad, 'pde2_')
+      self.record_layer_gradient(uMseWallsGrad, 'uWalls_')
+      self.record_layer_gradient(vMseWallsGrad, 'vWalls_')
     for key in self.trainMetrics:
       self.trainStat[key] = self.trainMetrics[key].result()
     return self.trainStat
 
 
   def test_step(self, data):
-    xy   = data[0][0]
-    t    = data[0][1]
-    w    = data[0][2]
-    uv   = data[1]
+    xy       = data[0][0]
+    t        = data[0][1]
+    w        = data[0][2]
+    xyWalls  = data[0][3]
+    tWalls   = data[0][4]
+    bcDomain = data[0][5]
+    uv       = data[1]
 
     # Compute the data and pde losses
-    uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2 = self.compute_data_pde_losses(xy, t, w, uv)
+    uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls = \
+      self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
     # replica's loss, divided by global batch size
-    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse
-            + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2)
+    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
+            + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
+            + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls )
 
     # Track loss and mae
     self.validMetrics['loss'].update_state(loss)
@@ -198,6 +220,8 @@ class BubblePINN(keras.Model):
     self.validMetrics['pde0'].update_state(pdeMse0)
     self.validMetrics['pde1'].update_state(pdeMse1)
     self.validMetrics['pde2'].update_state(pdeMse2)
+    self.validMetrics['uMseWalls'].update_state(uMseWalls)
+    self.validMetrics['vMseWalls'].update_state(vMseWalls)
     w = tf.squeeze(w)
     w.set_shape([None])
     uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
@@ -215,6 +239,12 @@ class BubblePINN(keras.Model):
       self.trainMetrics[key].reset_states()
     for key in self.validMetrics:
       self.validMetrics[key].reset_states()
+
+
+  @property
+  def metrics(self):
+    return [self.trainMetrics[key] for key in self.trainMetrics] \
+         + [self.validMetrics[key] for key in self.validMetrics]
 
 
   def summary(self):
@@ -237,4 +267,6 @@ class BubblePINN(keras.Model):
           self.alpha[0], self.alpha[1], self.alpha[2]))
     print('Coefficients for pde residual {} {} {}'.format(\
           self.beta[0], self.beta[1], self.beta[2]))
+    print('Coefficients for domain wall loss {} {}'.format(\
+          self.gamma[0], self.gamma[1]))
     print('--------------------------------')

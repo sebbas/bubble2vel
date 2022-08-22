@@ -28,7 +28,7 @@ import butils as Util
 keras.backend.set_floatx('float32')
 
 parser = argparse.ArgumentParser()
-### Architecture
+# Architecture
 parser.add_argument('-l', '--architecture', type=int, nargs='*',
                     default=[100, 100, 100, 100, 50, 50, 50, 50],
                     help='size of each hidden layer')
@@ -41,7 +41,7 @@ parser.add_argument('-alpha', '--alpha', type=float, nargs=3, default=[1.0, 1.0,
 parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-4, 1e-4, 1e-4],
                     help='coefficients for pde residual')
 
-### Points for data, boundary and unknown fluid areas
+# Points for data, boundary and unknown fluid areas
 parser.add_argument('-d', '--nDataPoint', type=int, default=1000,
                     help='number of data points in training')
 parser.add_argument('-b', '--nBcPoint', type=int, default=250,
@@ -49,7 +49,7 @@ parser.add_argument('-b', '--nBcPoint', type=int, default=250,
 parser.add_argument('-c', '--nColPoint', type=int, default=2000,
                     help='number of collocation points in training')
 
-### Epochs, checkpoints
+# Epochs, checkpoints
 parser.add_argument('-f', '--file', default='../data/bdata_512_56389.h5',
                     help='the file(s) containing flow velocity training data')
 parser.add_argument('-tf', '--totalFrames', type=int, default=400,
@@ -89,20 +89,20 @@ dataSet = BD.BubbleDataSet(args.file, args.totalFrames, args.nDataPoint, args.nB
 if not args.cachedInput:
   if not dataSet.load_data():
     sys.exit()
-  dataSet.extract_domain_bc(walls=[0,0,1,0])
-  dataSet.extract_bubble_bc(velEps=0.01)
+  dataSet.extract_wall_points(walls=[0,0,1,0])
+  dataSet.extract_data_points(velEps=0.01)
   dataSet.extract_collocation_points()
   dataSet.save()
   dataSet.summary()
 else:
   dataSet.restore(args.file)
-dataSet.combine_data_colloc_points()
+dataSet.prepare_batch_arrays()
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(nDim)
 
-### Create training and validation
-nSamples = dataSet.get_num_bc() + dataSet.get_num_col()
+# Create training and validation (data + collocation points)
+nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()
 nValid   = int(nSamples * 0.1)
 nTrain   = nSamples - nValid
 
@@ -124,7 +124,7 @@ bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 
 bubbleNet.preview()
 
-### Callbacks
+# Callbacks
 bubbleCB = [keras.callbacks.ModelCheckpoint(filepath='./' + modelName + '/checkpoint', \
                                             monitor='val_loss', save_best_only=True,\
                                             save_weights_only=True, verbose=1),
@@ -132,14 +132,14 @@ bubbleCB = [keras.callbacks.ModelCheckpoint(filepath='./' + modelName + '/checkp
                                               patience=args.patience, min_lr=args.lrmin),
             keras.callbacks.CSVLogger(modelName+'.log', append=True)]
 
-### Load checkpoints if restart
+# Load checkpoints if restart
 if args.restart:
   ckpntName = modelName if args.checkpoint == None else args.checkpoint
   bubbleNet.load_weights(tf.train.latest_checkpoint(ckpntName))
   if args.restartLr != None:
     keras.backend.set_value(bubbleNet.optimizer.learning_rate, args.restartLr)
 
-### Training
+# Training
 bubbleNet.fit(
       trainGen,
       initial_epoch=args.initTrain,
@@ -151,7 +151,7 @@ bubbleNet.fit(
       callbacks=bubbleCB)
 #bubbleNet.summary()
 
-### Loss plot
+# Loss plot
 losses = pd.DataFrame(bubbleNet.history.history)
 fig = losses.plot().get_figure()
 Util.save_figure_dataframe(losses, fig, 'stats', 'losses')

@@ -164,8 +164,8 @@ class BubbleDataSet:
       yield [xy, t, w], label
 
 
-  def combine_data_colloc_points(self):
-    print('Combine data and collocation points.')
+  def prepare_batch_arrays(self):
+    print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
     colPntLabel = 0.0 # Label for collocation points
 
@@ -220,8 +220,8 @@ class BubbleDataSet:
 
 
   # Define solid domain borders: walls = [top, right, bottom, left]
-  def extract_domain_bc(self, walls):
-    print('Extract domain boundary')
+  def extract_wall_points(self, walls):
+    print('Extracting domain wall points')
 
     bcFrameLst = [] # Domain boundary condition for every frame
     xyFrameLst = [] # Domain boundary condition xy for every frame
@@ -298,8 +298,8 @@ class BubbleDataSet:
       s = e
 
 
-  def extract_bubble_bc(self, velEps=0.1):
-    print('Extract bubble boundary')
+  def extract_data_points(self, velEps=0.1):
+    print('Extracting data points')
 
     bcFrameLst = []
     xyFrameLst = []
@@ -531,11 +531,15 @@ class BubbleDataSet:
     print('Restored dataset from file {}'.format(fname))
 
 
-  def get_num_bc(self):
+  def get_num_wall_pts(self):
+    return len(self.xyDomain)
+
+
+  def get_num_data_pts(self):
     return len(self.xyBc)
 
 
-  def get_num_col(self):
+  def get_num_col_pts(self):
     return len(self.xyCol)
 
 

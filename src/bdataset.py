@@ -87,7 +87,7 @@ class BubbleDataSet:
 
       # Normalization. Remember: input is optical flow, i.e. pixel movement between frame i and i+1
       if normalize:
-        normWithMaxVel = False
+        normWithMaxVel = True
         # Normalize data with the overall maximum velocity
         if normWithMaxVel:
           maxVel = np.zeros(self.dim)

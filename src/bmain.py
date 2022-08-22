@@ -92,7 +92,7 @@ if not args.cachedInput:
   if not dataSet.load_data():
     sys.exit()
   dataSet.extract_wall_points(walls=[0,0,1,0])
-  dataSet.extract_data_points(velEps=0.01)
+  dataSet.extract_data_points(velEps=0.1)
   dataSet.extract_collocation_points()
   dataSet.save()
   dataSet.summary()

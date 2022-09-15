@@ -91,11 +91,14 @@ class BubblePINN(keras.Model):
         uvPred = self([xy, t])
         uPred  = uvPred[:,0]
         vPred  = uvPred[:,1]
+        pPred  = uvPred[:,2]
       # 1st order derivatives
-      u_x = tape1.gradient(uPred, xy)[:,0]
-      u_y = tape1.gradient(uPred, xy)[:,1]
-      v_x = tape1.gradient(vPred, xy)[:,0]
-      v_y = tape1.gradient(vPred, xy)[:,1]
+      u_grad = tape1.gradient(uPred, xy)
+      v_grad = tape1.gradient(vPred, xy)
+      p_grad = tape1.gradient(pPred, xy)
+      u_x, u_y = u_grad[:,0], u_grad[:,1]
+      v_x, v_y = v_grad[:,0], v_grad[:,1]
+      p_x, p_y = p_grad[:,0], p_grad[:,1]
       u_t = tape1.gradient(uPred,  t)
       v_t = tape1.gradient(vPred,  t)
       del tape1
@@ -114,10 +117,11 @@ class BubblePINN(keras.Model):
 
     # Compute pde loss, 0 continuity, 1-2 NS
     ww      = 1.0 - w
-    kinVisc = 0.002
-    pde0    = u_x + v_y
-    pde1    = u_t + uPred*u_x + vPred*u_y - (u_xx + u_yy)*kinVisc
-    pde2    = v_t + uPred*v_x + vPred*v_y - (v_xx + v_yy)*kinVisc
+    nu      = 0.002   # kinematic viscosity
+    rho     = 0.96333 # density at 200F
+    pde0    = tf.square(u_x + v_y)
+    pde1    = tf.square(u_t + uPred*u_x + vPred*u_y + p_x*(1/rho) - (u_xx + u_yy)*nu)
+    pde2    = tf.square(v_t + uPred*v_x + vPred*v_y + p_y*(1/rho) - (v_xx + v_yy)*nu)
     ww.set_shape([None])
     pdeMse0 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde0,ww))
     pdeMse1 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde1,ww))

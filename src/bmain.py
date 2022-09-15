@@ -43,20 +43,10 @@ parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-4, 1e-4,
 parser.add_argument('-gamma', '--gamma', type=float, nargs=3, default=[1.0, 1.0, 1.0],
                     help='coefficients for domain wall loss')
 
-# Points for data, boundary and unknown fluid areas
-parser.add_argument('-d', '--nDataPoint', type=int, default=1000,
-                    help='number of data points in training')
-parser.add_argument('-b', '--nBcPoint', type=int, default=250,
-                    help='number of boundary points in training')
-parser.add_argument('-c', '--nColPoint', type=int, default=2000,
-                    help='number of collocation points in training')
-
 # Epochs, checkpoints
 parser.add_argument('-f', '--file', default='../data/bdata_512_56389.h5',
-                    help='the file(s) containing flow velocity training data')
-parser.add_argument('-tf', '--totalFrames', type=int, default=400,
-                    help='number of frames to load from dataset')
-parser.add_argument('-name', '--name', default='BubblePINN', help='model name prefix')
+                    help='file containing training and validation points')
+parser.add_argument('-name', '--name', default='bubble2vel', help='model name prefix')
 parser.add_argument('-ie', '--initTrain', type=int, default=0,
                     help='initial train epochs')
 parser.add_argument('-e', '--nEpoch', default=10000, type=int, help='epochs')
@@ -77,27 +67,16 @@ parser.add_argument('-lr',  '--restartLr', type=float, default=None,
 # Save more info
 parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
                     help='save gradient statistics')
-parser.add_argument('-ci', '--cachedInput', default=False, action='store_true',
-                    help='extract boundary values from cached numpy arrays')
 
 args = parser.parse_args()
 
 nDim = 2
 archStr = Util.get_arch_string(args.architecture)
 
-# Load external data
-dataSet = BD.BubbleDataSet(args.file, args.totalFrames, args.nDataPoint, args.nBcPoint, args.nColPoint, dim=nDim)
-
-if not args.cachedInput:
-  if not dataSet.load_data():
-    sys.exit()
-  dataSet.extract_wall_points(walls=[0,0,1,0])
-  dataSet.extract_data_points(velEps=0.1)
-  dataSet.extract_collocation_points()
-  dataSet.save()
-  dataSet.summary()
-else:
-  dataSet.restore(args.file)
+# Restore dataset with data from generated .h5 file
+assert args.file.endswith('.h5')
+dataSet = BD.BubbleDataSet()
+dataSet.restore(args.file)
 dataSet.prepare_batch_arrays()
 
 # Ensure correct output size at end of input architecture
@@ -121,7 +100,7 @@ trainGen = dataSet.generate_train_valid_batch(0, nTrain, 0, nTrainW, normalizeXy
 validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSamplesW, normalizeXyt=True, batchSize=args.batchSize)
 
 # Create model
-modelName = args.name + archStr + '_c{}'.format(args.nColPoint)
+modelName = args.name + archStr + '_c{}'.format(dataSet.get_num_col_pts())
 
 #with BM.strategy.scope():
 bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg, alpha=args.alpha, beta=args.beta)

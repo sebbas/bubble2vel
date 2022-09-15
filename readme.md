@@ -16,14 +16,28 @@ bubbles whose optical flow was obtained with
 
 ## Usage
 
-Data generation, training and prediction in one go. Navigate to `src/` and execute:
+### Generate training & validation data
 
-`python3 bmain.py -c 50000 -e 2 -tf 50 -p 10 -bs 64 -ev -ci -f ../data/bdata_512_56389.h5`
+`python3 bgenerate.py -c 800000 -b 1000 -tf 399 -f ../data/PB_30W_RGB/512/30W%06d.flo`
 
-This extracts data for 50 frames from the `.h5` dataset in `../data`. Then it
-trains the model with all available fluid/vapor data points and 50000 uniformly
-and randomly sampled collocation points placed in fluid areas (1000 per frame).
-Finally it makes a prediction of the fluid velocity field of the first 10 frames.
+Extracts all data and the given number of collocation and boundary points from the specified number (`-tf`)  of `.flo` files.
+Collocation (`-c`) and boundary points (`-b`) are spread evenly across the input files.
+
+Final point arrays and additional domain data will be saved to `../data/` in `.h5` format.
+
+### Train the model
+
+`python3 bmain.py -e 5000 -bs 128 -f ../data/bdata_512_56389.h5`
+
+Uses the generated training & validation data (`.h5` file) to train the model.
+Optional: Specify the number of epochs (`-e`) and batch size (`-bs`). Change model architecture (e.g. `-l 50 50 50`).
+
+### Predict fluid flow
+
+`python3 bpredict.py -p 50 -f ../data/bdata_512_56389.h5`
+
+Uses the trained model to predict the full velocity field.
+Optional: Specify the number of frames to predict (`-p`). Export predictions as video (`-ev`).
 
 <figure>
 <p float="left">
@@ -36,40 +50,12 @@ Finally it makes a prediction of the fluid velocity field of the first 10 frames
 </figcaption>
 </figure>
 
-### Generating a dataset
-
-With option `-ci` the script skips preprocessing and loads data directly from a
-`.h5` file. See above command.
-
-To generate a custom `.h5` dataset from `.flo` files, simply omit option `-ci`
-and set the file option to point to the flownet files:
-
-`python3 bmain.py -c 50000 -e 2 -tf 50 -p 10 -bs 64 -ev -f ../data/PB_30W_RGB/512/30W%06d.flo`
-
-A new `bdata_<sizeX>_<numDataPoints>.h5` dataset will be saved in `data/`.
-
-## Command line arguments
-
-* `-c 10000` use 10000 collocation points during training, 10 per frame when using together with `-tf 10`
-* `-e 20` specifies the number of epochs used during training
-* `-tf 200` the number of frames to extract data from
-* `-p 10` the number of frames to predict using the model after training
-* `-ci` load training data from `.h5` instead of processing files
-from the `data/` directory.
-* `-pd` predict velocities of entire domain and do not skip bubble areas
-* `-bs 64` use a 64 sample batchsize for training
-* `-l 50 50 50` hidden layers of the densely connected PINN. Here with 3 hidden layers and 50 nodes per layer (use more than this!)
-* `-f ../data/PB_30W_RGB/512/30W%06d.flo`  specifies the location and format of the flownet input files
-* `-ev` export videos of images that were generated 
-
 ## Project structure
  
 * `src/` includes PINN and util functions that load and prepare external data
-* `data/` location of optical flow data for training (`.flo` format). Also
-stores compressed `.h5` data files here.
+* `data/` location of optical flow data for training (`.flo` format). The compressed `.h5` data files are saved here too.
 
-A full run of the model creates the following additional directories:
-
+During predictions and plotting the following directories will be created automatically:
 * `img/` contains plots of input data, predictions as well as loss plots
 * `vid/` visualization of `img/` contents with `ffmpeg`
 

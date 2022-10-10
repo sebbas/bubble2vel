@@ -46,7 +46,7 @@ parser.add_argument('-gamma', '--gamma', type=float, nargs=3, default=[1.0, 1.0,
 # Epochs, checkpoints
 parser.add_argument('-f', '--file', default='../data/bdata_512_56389.h5',
                     help='file containing training and validation points')
-parser.add_argument('-name', '--name', default='bubble2vel', help='model name prefix')
+parser.add_argument('-n', '--name', default='bubble2vel', help='model name prefix')
 parser.add_argument('-ie', '--initTrain', type=int, default=0,
                     help='initial train epochs')
 parser.add_argument('-e', '--nEpoch', default=10000, type=int, help='epochs')

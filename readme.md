@@ -30,6 +30,7 @@ Final point arrays and additional domain data will be saved to `../data/` in `.h
 `python3 bmain.py -e 5000 -bs 128 -f ../data/bdata_512_56389.h5`
 
 Uses the generated training & validation data (`.h5` file) to train the model.
+
 Optional: Specify the number of epochs (`-e`) and batch size (`-bs`). Change model architecture (e.g. `-l 50 50 50`).
 
 ### Predict fluid flow
@@ -37,6 +38,7 @@ Optional: Specify the number of epochs (`-e`) and batch size (`-bs`). Change mod
 `python3 bpredict.py -p 50 -f ../data/bdata_512_56389.h5`
 
 Uses the trained model to predict the full velocity field.
+
 Optional: Specify the number of frames to predict (`-p`). Export predictions as video (`-ev`).
 
 <figure>

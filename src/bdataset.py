@@ -21,9 +21,8 @@ class BubbleDataSet:
   FLAG_BUBBLE = 1
   FLAG_VISITED = 1
 
-  def __init__(self, fName, totalframes, datapoints, bcpoints, colpoints, startframe=0, dim=2):
+  def __init__(self, fName='', totalframes=0, datapoints=0, bcpoints=0, colpoints=0, startframe=0, dim=2):
     assert dim == 2, "Only supporting 2D datasets"
-    assert totalframes > 0, "Must use more than 0 frames"
     self.fName        = fName
     self.dim          = dim
     self.size         = np.zeros(self.dim, dtype=int)
@@ -113,6 +112,11 @@ class BubbleDataSet:
           u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
           v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
           print('After normalization max vel [{}, {}]'.format(u, v))
+      else:
+        if Util.PRINT_DEBUG:
+          u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
+          v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
+          print('No normalization, max vel [{}, {}]'.format(u, v))
     else:
       print('No data read. Returning early. Does the dataset exist?')
       self.isLoaded = False
@@ -192,7 +196,7 @@ class BubbleDataSet:
     self.bcDomain = self.bcDomain[pp]
 
 
-  def generate_train_valid_batch(self, begin, end, beginW, endW, loop=True,
+  def generate_train_valid_batch(self, begin, end, beginW, endW,
                                  normalizeXyt=True, batchSize=64, shuffle=True):
     generatorType = 'training' if begin == 0 else 'validation'
     print('\nGenerating {} sample {} batch'.format(batchSize, generatorType))
@@ -219,15 +223,12 @@ class BubbleDataSet:
       t[:, 0]     = self.xyt[s:s+batchSize, self.dim]
       id[:, 0]    = self.id[s:s+batchSize, 0]
 
-      randInd = np.random.choice(self.xyDomain.shape[0], batchSize, replace=False)
-      xyW[:, :]    = self.xyDomain[randInd, :self.dim]
-      labelW[:, :] = self.bcDomain[randInd, :self.dim]
-
+      labelW[:, :] = self.bcDomain[sW:sW+batchSize, :self.dim]
       xyW[:, :]    = self.xyDomain[sW:sW+batchSize, :self.dim]
       tW[:, 0]     = self.xyDomain[sW:sW+batchSize, self.dim]
-      labelW[:, :] = self.bcDomain[sW:sW+batchSize, :self.dim]
 
-      s += batchSize
+      s  += batchSize
+      sW += batchSize
 
       # Normalization
       if normalizeXyt:
@@ -384,7 +385,7 @@ class BubbleDataSet:
             # Cut-off based on velocity, ie if neighbor has no vel it is fluid
             if mag[ni, nj] < velEps:
               stack.append(n) # Add fluid cell to stack, it needs to be searched next
-              flags[n[0], n[1]] = 0
+              flags[n[0], n[1]] = self.FLAG_FLUID
             else:
               intersection[n[0], n[1]] = 1 # Mark this cell in boundary condition mask
 
@@ -414,16 +415,13 @@ class BubbleDataSet:
 
       # Add bubble border velocities to bc list
       curVels = self.vel[frame, :, :, :]
-      bubbleBorderVels = curVels[np.array(intersection, dtype=bool)]
+      bubbleBorderVels = curVels[np.array(flags, dtype=bool)]
       bcLst.extend(bubbleBorderVels)
       bcFrameLst.append(bcLst)
 
       # Add bubble border positions to xyBc list
-      nz = np.nonzero(intersection)
-      # Normalized pixel indices?
-      normIndices = False
-      norm = self.size if normIndices else np.ones(self.dim, dtype=int)
-      bubbleBorderIndices = list(zip(nz[0] / norm[0], nz[1] / norm[1]))
+      nz = np.nonzero(flags)
+      bubbleBorderIndices = list(zip(nz[0], nz[1]))
       xyLst.extend(bubbleBorderIndices)
       xyFrameLst.append(xyLst)
 
@@ -539,8 +537,7 @@ class BubbleDataSet:
 
   def restore(self, fname):
     if not os.path.exists(fname):
-      print('File {} does not exist'.format(fname))
-      return
+      sys.exit('File {} does not exist'.format(fname))
 
     dFile = h5.File(fname, 'r')
 

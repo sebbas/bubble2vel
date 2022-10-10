@@ -25,10 +25,10 @@ dataSet = BD.BubbleDataSet(fName=args.file, totalframes=args.totalFrames,
                            bcpoints=args.nBcPoint, colpoints=args.nColPoint)
 
 # Extract points from images and save in arrays from dataset
-if not dataSet.load_data():
+if not dataSet.load_data(normalize=False):
   sys.exit()
 dataSet.extract_wall_points(walls=[0,0,1,0])
-dataSet.extract_data_points(velEps=0.1)
+dataSet.extract_data_points(velEps=1.0)
 dataSet.extract_collocation_points()
 dataSet.save()
 dataSet.summary()

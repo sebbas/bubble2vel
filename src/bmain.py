@@ -80,7 +80,7 @@ dataSet.restore(args.file)
 dataSet.prepare_batch_arrays()
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(nDim)
+args.architecture.append(nDim + 1)
 
 # Create training and validation (data + collocation points)
 nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()

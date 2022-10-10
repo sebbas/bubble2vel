@@ -509,6 +509,7 @@ class BubbleDataSet:
     fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}.h5'.format(self.size[0], nSampleBc, nSampleCol, self.colRes))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']      = self.size
+    dFile.attrs['frames']    = self.nTotalFrames
     dFile.attrs['nColPnt']   = self.nColPnt
     dFile.attrs['nBcBubble'] = np.asarray(self.nBcBubble)
     dFile.attrs['nFluid']    = np.asarray(self.nFluid)
@@ -541,11 +542,12 @@ class BubbleDataSet:
 
     dFile = h5.File(fname, 'r')
 
-    self.size      = dFile.attrs['size']
-    self.nColPnt   = dFile.attrs['nColPnt']
-    self.nBcBubble = dFile.attrs['nBcBubble']
-    self.nFluid    = dFile.attrs['nFluid']
-    self.nBcDomain = dFile.attrs['nBcDomain']
+    self.size         = dFile.attrs['size']
+    self.nTotalFrames = dFile.attrs['frames']
+    self.nColPnt      = dFile.attrs['nColPnt']
+    self.nBcBubble    = dFile.attrs['nBcBubble']
+    self.nFluid       = dFile.attrs['nFluid']
+    self.nBcDomain    = dFile.attrs['nBcDomain']
 
     self.bc       = np.array(dFile.get('bc'))
     self.xyBc     = np.array(dFile.get('xyBc'))
@@ -557,6 +559,7 @@ class BubbleDataSet:
     self.isLoaded = True
     dFile.close()
     print('Restored dataset from file {}'.format(fname))
+    print('Dataset: size [{},{}], frames {}'.format(self.size[0], self.size[1], self.nTotalFrames))
 
 
   def get_num_wall_pts(self):

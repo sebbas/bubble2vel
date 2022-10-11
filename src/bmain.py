@@ -97,7 +97,8 @@ assert nValid > 0 and nValidW > 0, 'Number of validation samples must be greater
 
 # Domain specific constants, must match dataset contents!
 FPS         = 400                # [frames/sec]
-DOMAIN_SIZE = 0.03               # [meters]
+PIXEL_SIZE  = 1.922e-5           # [meters] at resolution 1024px
+DOMAIN_SIZE = PIXEL_SIZE * 1024  # [meters]
 IMG_SIZE    = dataSet.get_size() # [pixels]
 
 # Generators

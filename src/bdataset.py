@@ -506,7 +506,7 @@ class BubbleDataSet:
     nSampleDomain = np.sum(self.nBcDomain)
     nSampleCol = np.sum(self.nColPnt)
 
-    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}.h5'.format(self.size[0], nSampleBc, nSampleCol, self.colRes))
+    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}_t{}.h5'.format(self.size[0], nSampleBc, nSampleCol, self.colRes, self.nTotalFrames))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']      = self.size
     dFile.attrs['frames']    = self.nTotalFrames

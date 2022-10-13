@@ -415,12 +415,12 @@ class BubbleDataSet:
 
       # Add bubble border velocities to bc list
       curVels = self.vel[frame, :, :, :]
-      bubbleBorderVels = curVels[np.array(flags, dtype=bool)]
+      bubbleBorderVels = curVels[np.array(intersection, dtype=bool)]
       bcLst.extend(bubbleBorderVels)
       bcFrameLst.append(bcLst)
 
       # Add bubble border positions to xyBc list
-      nz = np.nonzero(flags)
+      nz = np.nonzero(intersection)
       bubbleBorderIndices = list(zip(nz[0], nz[1]))
       xyLst.extend(bubbleBorderIndices)
       xyFrameLst.append(xyLst)

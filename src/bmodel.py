@@ -119,10 +119,10 @@ class BubblePINN(keras.Model):
       with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape1:
         tape1.watch(xyStar)
         tape1.watch(tStar)
-        uvPred = self([xyStar, tStar])
-        uPred  = uvPred[:,0]
-        vPred  = uvPred[:,1]
-        pPred  = uvPred[:,2]
+        uvpPred = self([xyStar, tStar])
+        uPred  = uvpPred[:,0]
+        vPred  = uvpPred[:,1]
+        pPred  = uvpPred[:,2]
       # 1st order derivatives
       u_grad = tape1.gradient(uPred, xyStar)
       v_grad = tape1.gradient(vPred, xyStar)
@@ -143,8 +143,8 @@ class BubblePINN(keras.Model):
     # Compute data loss
     w = tf.squeeze(w)
     w.set_shape([None])
-    uMse = keras.losses.mean_squared_error(tf.boolean_mask(uvStar[:,0],w), tf.boolean_mask(uvPred[:,0],w))
-    vMse = keras.losses.mean_squared_error(tf.boolean_mask(uvStar[:,1],w), tf.boolean_mask(uvPred[:,1],w))
+    uMse = keras.losses.mean_squared_error(tf.boolean_mask(uvStar[:,0],w), tf.boolean_mask(uvpPred[:,0],w))
+    vMse = keras.losses.mean_squared_error(tf.boolean_mask(uvStar[:,1],w), tf.boolean_mask(uvpPred[:,1],w))
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
     ww      = 1.0 - w
@@ -157,11 +157,11 @@ class BubblePINN(keras.Model):
     pdeMse2 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde2,ww))
 
     # Compute domain wall loss
-    uvWallsPred = self([xyWallsStar, tWallsStar])
-    uMseWalls = keras.losses.mean_squared_error(uvWallsStar[:,0], uvWallsPred[:,0])
-    vMseWalls = keras.losses.mean_squared_error(uvWallsStar[:,1], uvWallsPred[:,1])
+    uvpWallsPred = self([xyWallsStar, tWallsStar])
+    uMseWalls = keras.losses.mean_squared_error(uvWallsStar[:,0], uvpWallsPred[:,0])
+    vMseWalls = keras.losses.mean_squared_error(uvWallsStar[:,1], uvpWallsPred[:,1])
 
-    return uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls
+    return uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls
 
 
   def train_step(self, data):
@@ -176,7 +176,7 @@ class BubblePINN(keras.Model):
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
-      uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls = \
+      uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls = \
         self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
       # replica's loss, divided by global batch size
       loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse
@@ -211,8 +211,8 @@ class BubblePINN(keras.Model):
     self.trainMetrics['vMseWalls'].update_state(vMseWalls)
     w = tf.squeeze(w)
     w.set_shape([None])
-    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
-    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvPred[:,1],w))
+    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvpPred[:,0],w))
+    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvpPred[:,1],w))
     self.trainMetrics['uMae'].update_state(uMae)
     self.trainMetrics['vMae'].update_state(vMae)
     # track gradients coefficients
@@ -239,7 +239,7 @@ class BubblePINN(keras.Model):
     uv       = data[1]
 
     # Compute the data and pde losses
-    uvPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls = \
+    uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls = \
       self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
     # replica's loss, divided by global batch size
     loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
@@ -257,8 +257,8 @@ class BubblePINN(keras.Model):
     self.validMetrics['vMseWalls'].update_state(vMseWalls)
     w = tf.squeeze(w)
     w.set_shape([None])
-    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvPred[:,0],w))
-    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvPred[:,1],w))
+    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvpPred[:,0],w))
+    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvpPred[:,1],w))
     self.validMetrics['uMae'].update_state(uMae)
     self.validMetrics['vMae'].update_state(vMae)
 

@@ -36,7 +36,7 @@ parser.add_argument('-l', '--architecture', type=int, nargs='*',
 # Regularizer coefficients
 parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
                     help='l2 regularization')
-parser.add_argument('-alpha', '--alpha', type=float, nargs=3, default=[1.0, 1.0, 1.0],
+parser.add_argument('-alpha', '--alpha', type=float, nargs=2, default=[1.0, 1.0],
                     help='coefficients for data loss')
 parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-4, 1e-4, 1e-4],
                     help='coefficients for pde residual')

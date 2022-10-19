@@ -18,7 +18,7 @@ strategy = tf.distribute.MirroredStrategy()
 
 class BubblePINN(keras.Model):
   def __init__(self, width=[256, 256, 256, 128, 128, 128, 64, 32, 3],\
-               alpha=[1.0, 1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1.0, 1.0],\
+               alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1.0, 1.0],\
                reg=None, saveGradStat=False, fps=400, domainSize=0.03, imgSize=512, **kwargs):
     super(BubblePINN, self).__init__(**kwargs)
     self.width = width
@@ -296,8 +296,8 @@ class BubblePINN(keras.Model):
     #print(self.width)
     print('Layer regularization: {}'.format(self.reg))
     #print(self.reg)
-    print('Coefficients for data loss {} {} {}'.format(\
-          self.alpha[0], self.alpha[1], self.alpha[2]))
+    print('Coefficients for data loss {} {}'.format(\
+          self.alpha[0], self.alpha[1]))
     print('Coefficients for pde residual {} {} {}'.format(\
           self.beta[0], self.beta[1], self.beta[2]))
     print('Coefficients for domain wall loss {} {}'.format(\

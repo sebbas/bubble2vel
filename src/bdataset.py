@@ -21,7 +21,7 @@ class BubbleDataSet:
   FLAG_BUBBLE = 1
   FLAG_VISITED = 1
 
-  def __init__(self, fName='', totalframes=0, datapoints=0, bcpoints=0, colpoints=0, startframe=0, dim=2):
+  def __init__(self, fName='', totalframes=0, bcpoints=0, colpoints=0, startframe=0, dim=2):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
     self.dim          = dim
@@ -36,7 +36,6 @@ class BubbleDataSet:
     # Requested number of points
     self.nColPnt  = colpoints
     self.nBcPnt   = bcpoints
-    self.nDataPnt = datapoints
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim]
     # Arrays to store processed data (after processing ground truth)

@@ -497,7 +497,7 @@ class BubbleDataSet:
       s = e
 
 
-  def save(self, dir='../data/', filePrefix='bdata'):
+  def save(self, dir='../data/', filePrefix='bdata', walls=[0,0,1,0]):
     if not os.path.exists(dir):
       os.makedirs(dir)
 
@@ -506,7 +506,9 @@ class BubbleDataSet:
     nSampleDomain = np.sum(self.nBcDomain)
     nSampleCol = np.sum(self.nColPnt)
 
-    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}_t{}.h5'.format(self.size[0], nSampleBc, nSampleCol, self.colRes, self.nTotalFrames))
+    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}_t{}_w{}.h5'.format( \
+              self.size[0], nSampleBc, nSampleCol, self.colRes,
+              self.nTotalFrames, ''.join(map(str, walls))))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']      = self.size
     dFile.attrs['frames']    = self.nTotalFrames

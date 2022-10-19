@@ -70,7 +70,7 @@ class BubbleDataSet:
         assert sizeFromFile[1] == self.size[1], 'Height in dataset does not match width from files'
       # Copy read data into data structures
       self.size = sizeFromFile
-      assert self.size[0] * 2 + self.size[1] * 2 >= self.nBcDomainPnt, "Maximum number of bc domain points exceeded"
+      assert (self.size[0] + self.size[1]) * 2 * self.nTotalFrames >= self.nBcDomainPnt, "Maximum number of bc domain points exceeded"
 
       velLst.append(dataFromFile)
 

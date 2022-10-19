@@ -62,7 +62,7 @@ class BubblePINN(keras.Model):
 
   def call(self, inputs):
     '''
-    inputs: [xy, t, w]
+    inputs: [xy, t]
     '''
     xyt = tf.concat([inputs[0], inputs[1]], axis=-1)
     return self.mlp(xyt)

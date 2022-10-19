@@ -205,7 +205,7 @@ class BubbleDataSet:
     label  = np.zeros((batchSize, self.dim), dtype=float)
     xy     = np.zeros((batchSize, self.dim), dtype=float)
     t      = np.zeros((batchSize, 1),        dtype=float)
-    id     = np.zeros((batchSize, 1),        dtype=int)
+    id     = np.zeros((batchSize, 1),        dtype=float)
     # Arrays to store domain wall batch
     xyW    = np.zeros((batchSize, self.dim), dtype=float)
     tW     = np.zeros((batchSize, 1),        dtype=float)

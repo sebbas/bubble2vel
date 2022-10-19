@@ -508,7 +508,7 @@ class BubbleDataSet:
 
     fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}_t{}_w{}.h5'.format( \
               self.size[0], nSampleBc, nSampleCol, self.colRes,
-              self.nTotalFrames, ''.join(map(str, walls))))
+              self.nTotalFrames, Util.get_list_string(walls)))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']      = self.size
     dFile.attrs['frames']    = self.nTotalFrames

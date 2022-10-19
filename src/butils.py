@@ -82,3 +82,6 @@ def get_arch_string(arch):
   else:
     archStr = archStr + '-{}x{}'.format(l0, nSameSize)
   return archStr
+
+def get_list_string(list, delim=''):
+  return delim.join(map(str, list))

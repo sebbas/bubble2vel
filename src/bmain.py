@@ -106,7 +106,11 @@ trainGen = dataSet.generate_train_valid_batch(0, nTrain, 0, nTrainW, normalizeXy
 validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSamplesW, normalizeXyt=False, batchSize=args.batchSize)
 
 # Create model
-modelName = args.name + archStr + '_c{}'.format(dataSet.get_num_col_pts())
+modelName = args.name + archStr + '_d{}_c{}_a{}_b{}_g{}-lr{}'.format( \
+              dataSet.get_num_data_pts(), dataSet.get_num_col_pts(), \
+              Util.get_list_string(args.alpha, delim='-'), \
+              Util.get_list_string(args.beta, delim='-'), \
+              Util.get_list_string(args.gamma, delim='-'), args.lr0)
 
 #with BM.strategy.scope():
 bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg,

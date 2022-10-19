@@ -223,7 +223,7 @@ class BubbleDataSet:
       t[:, 0]     = self.xyt[s:s+batchSize, self.dim]
       id[:, 0]    = self.id[s:s+batchSize, 0]
 
-      labelW[:, :] = self.bcDomain[sW:sW+batchSize, :self.dim]
+      labelW[:, :] = self.bcDomain[sW:sW+batchSize, :]
       xyW[:, :]    = self.xyDomain[sW:sW+batchSize, :self.dim]
       tW[:, 0]     = self.xyDomain[sW:sW+batchSize, self.dim]
 

@@ -6,9 +6,9 @@ import butils as Util
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('-b', '--nBcDomainPoint', type=int, default=128,
+parser.add_argument('-b', '--nBcDomainPoint', type=int, default=5000,
                     help='number of boundary points in training')
-parser.add_argument('-c', '--nColPoint', type=int, default=2000,
+parser.add_argument('-c', '--nColPoint', type=int, default=100000,
                     help='number of collocation points in training')
 
 parser.add_argument('-f', '--file', default='../data/PB_30W_RGB/512/30W%06d.flo',

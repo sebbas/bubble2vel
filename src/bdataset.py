@@ -21,7 +21,7 @@ class BubbleDataSet:
   FLAG_BUBBLE = 1
   FLAG_VISITED = 1
 
-  def __init__(self, fName='', totalframes=0, bcpoints=0, colpoints=0, startframe=0, dim=2):
+  def __init__(self, fName='', totalframes=0, bcdomainPoints=0, colPoints=0, startframe=0, dim=2):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
     self.dim          = dim
@@ -30,12 +30,11 @@ class BubbleDataSet:
     self.startframe   = startframe
     self.nTotalFrames = totalframes
     # Lists to count number of cells per frame
-    self.nBcDomain = []
     self.nBcBubble = []
     self.nFluid    = []
     # Requested number of points
-    self.nColPnt  = colpoints
-    self.nBcPnt   = bcpoints
+    self.nColPnt      = colPoints
+    self.nBcDomainPnt = bcdomainPoints
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim]
     # Arrays to store processed data (after processing ground truth)
@@ -71,6 +70,8 @@ class BubbleDataSet:
         assert sizeFromFile[1] == self.size[1], 'Height in dataset does not match width from files'
       # Copy read data into data structures
       self.size = sizeFromFile
+      assert self.size[0] * 2 + self.size[1] * 2 >= self.nBcDomainPnt, "Maximum number of bc domain points exceeded"
+
       velLst.append(dataFromFile)
 
       # Prepare next file name
@@ -178,7 +179,7 @@ class BubbleDataSet:
     xytSamples = np.concatenate((self.xyBc, self.xyCol))
     ones       = np.full((len(self.xyBc), 1), 1) # Indicates a data point
     zeros      = np.full((len(self.xyCol), 1), 0) # Indicates a collocation point
-    idSamples   = np.concatenate((ones, zeros))
+    idSamples  = np.concatenate((ones, zeros))
 
     assert len(bcSamples) == len(xytSamples)
     assert len(bcSamples) == len(idSamples)
@@ -204,7 +205,7 @@ class BubbleDataSet:
     label  = np.zeros((batchSize, self.dim), dtype=float)
     xy     = np.zeros((batchSize, self.dim), dtype=float)
     t      = np.zeros((batchSize, 1),        dtype=float)
-    id     = np.zeros((batchSize, 1),        dtype=float)
+    id     = np.zeros((batchSize, 1),        dtype=int)
     # Arrays to store domain wall batch
     xyW    = np.zeros((batchSize, self.dim), dtype=float)
     tW     = np.zeros((batchSize, 1),        dtype=float)
@@ -253,6 +254,7 @@ class BubbleDataSet:
   # Define solid domain borders: walls = [top, right, bottom, left]
   def extract_wall_points(self, walls):
     print('Extracting domain wall points')
+    rng = np.random.default_rng(2022)
 
     bcFrameLst = [] # Domain boundary condition for every frame
     xyFrameLst = [] # Domain boundary condition xy for every frame
@@ -301,18 +303,15 @@ class BubbleDataSet:
       bcFrameLst.append(bcLst)
       xyFrameLst.append(xyLst)
 
-      # Keep track of bubble border cells per frame
-      self.nBcDomain.append(len(xyLst))
-  
       if Util.IMG_DEBUG:
         debugGrid = np.zeros((self.size), dtype=int)
         for x, y in xyLst:
           debugGrid[x,y] = 1
         Util.save_image(src=debugGrid, subdir='extract', name='domainPts_extract', frame=frame, origin='upper')
 
-    self.bcDomain = np.zeros((np.sum(self.nBcDomain), self.dim))
-    self.xyDomain = np.zeros((np.sum(self.nBcDomain), self.dim + 1))
-
+    self.bcDomain = np.zeros((self.nBcDomainPnt, self.dim))
+    self.xyDomain = np.zeros((self.nBcDomainPnt, self.dim + 1))
+    nBcDomainPntPerFrame = self.nBcDomainPnt // self.nTotalFrames
     s = 0
     for frame in range(self.nTotalFrames):
       Util.print_progress(frame, self.nTotalFrames)
@@ -320,12 +319,17 @@ class BubbleDataSet:
 
       n = len(bcFrameLst[frame])
       t = np.full((n, 1), frame, dtype=float)
-      e = s + n
+      e = s + nBcDomainPntPerFrame
       if n:
         uv = np.asarray(bcFrameLst[frame], dtype=float)
         xy = np.asarray(xyFrameLst[frame], dtype=float)
-        self.bcDomain[s:e, :] = uv
-        self.xyDomain[s:e, :] = np.hstack((xy, t))
+
+        # Insert random selection of domain wall coords into bc domain array
+        indices = np.arange(0, xy.shape[0])
+        randIndices = rng.choice(indices, size=nBcDomainPntPerFrame, replace=False)
+
+        self.bcDomain[s:e, :] = uv[randIndices]
+        self.xyDomain[s:e, :] = np.hstack((xy, t))[randIndices]
       s = e
 
 
@@ -500,21 +504,19 @@ class BubbleDataSet:
     if not os.path.exists(dir):
       os.makedirs(dir)
 
-    nSampleBc = np.sum(self.nBcBubble)
-    nSampleFluid = np.sum(self.nFluid)
-    nSampleDomain = np.sum(self.nBcDomain)
-    nSampleCol = np.sum(self.nColPnt)
+    nSampleBc     = np.sum(self.nBcBubble)
+    nSampleFluid  = np.sum(self.nFluid)
 
-    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_r{}_t{}_w{}.h5'.format( \
-              self.size[0], nSampleBc, nSampleCol, self.colRes,
+    fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_b{}_r{}_t{}_w{}.h5'.format( \
+              self.size[0], nSampleBc, self.nColPnt, self.nBcDomainPnt, self.colRes,
               self.nTotalFrames, Util.get_list_string(walls)))
     dFile = h5.File(fname, 'w')
-    dFile.attrs['size']      = self.size
-    dFile.attrs['frames']    = self.nTotalFrames
-    dFile.attrs['nColPnt']   = self.nColPnt
-    dFile.attrs['nBcBubble'] = np.asarray(self.nBcBubble)
-    dFile.attrs['nFluid']    = np.asarray(self.nFluid)
-    dFile.attrs['nBcDomain'] = np.asarray(self.nBcDomain)
+    dFile.attrs['size']         = self.size
+    dFile.attrs['frames']       = self.nTotalFrames
+    dFile.attrs['nColPnt']      = self.nColPnt
+    dFile.attrs['nBcDomainPnt'] = self.nBcDomainPnt
+    dFile.attrs['nBcBubble']    = np.asarray(self.nBcBubble)
+    dFile.attrs['nFluid']       = np.asarray(self.nFluid)
 
     # Compression
     comp_type = 'gzip'
@@ -526,11 +528,11 @@ class BubbleDataSet:
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyBc)
     dFile.create_dataset('xyFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyFluid)
-    dFile.create_dataset('bcDomain', (nSampleDomain, self.dim), compression=comp_type,
+    dFile.create_dataset('bcDomain', (self.nBcDomainPnt, self.dim), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.bcDomain)
-    dFile.create_dataset('xyDomain', (nSampleDomain, self.dim + 1), compression=comp_type,
+    dFile.create_dataset('xyDomain', (self.nBcDomainPnt, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyDomain)
-    dFile.create_dataset('xyCol', (nSampleCol, self.dim + 1), compression=comp_type,
+    dFile.create_dataset('xyCol', (self.nColPnt, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyCol)
 
     dFile.close()
@@ -548,7 +550,7 @@ class BubbleDataSet:
     self.nColPnt      = dFile.attrs['nColPnt']
     self.nBcBubble    = dFile.attrs['nBcBubble']
     self.nFluid       = dFile.attrs['nFluid']
-    self.nBcDomain    = dFile.attrs['nBcDomain']
+    self.nBcDomainPnt = dFile.attrs['nBcDomainPnt']
 
     self.bc       = np.array(dFile.get('bc'))
     self.xyBc     = np.array(dFile.get('xyBc'))

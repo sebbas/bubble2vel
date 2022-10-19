@@ -6,7 +6,7 @@ import butils as Util
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('-b', '--nBcPoint', type=int, default=250,
+parser.add_argument('-b', '--nBcDomainPoint', type=int, default=128,
                     help='number of boundary points in training')
 parser.add_argument('-c', '--nColPoint', type=int, default=2000,
                     help='number of collocation points in training')
@@ -25,7 +25,7 @@ assert args.file.endswith('.flo')
 
 # Create dataset object,
 dataSet = BD.BubbleDataSet(fName=args.file, totalframes=args.totalFrames,
-                           bcpoints=args.nBcPoint, colpoints=args.nColPoint)
+                           bcdomainPoints=args.nBcDomainPoint, colPoints=args.nColPoint)
 
 # Extract points from images and save in arrays from dataset
 if not dataSet.load_data(normalize=False):

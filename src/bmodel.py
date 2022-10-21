@@ -142,25 +142,26 @@ class BubblePINN(keras.Model):
 
     # Compute data loss
     w = tf.squeeze(w)
-    w.set_shape([None])
-    uMse = keras.losses.mean_squared_error(tf.boolean_mask(uvStar[:,0],w), tf.boolean_mask(uvpPred[:,0],w))
-    vMse = keras.losses.mean_squared_error(tf.boolean_mask(uvStar[:,1],w), tf.boolean_mask(uvpPred[:,1],w))
+    nDataPoint = tf.reduce_sum(w) + 1.0e-10
+    uMse  = tf.reduce_sum(w * tf.square(uvpPred[:,0] - uvStar[:,0])) / nDataPoint
+    vMse  = tf.reduce_sum(w * tf.square(uvpPred[:,1] - uvStar[:,1])) / nDataPoint
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
     ww      = 1.0 - w
-    pde0    = tf.square(u_x + v_y)
-    pde1    = tf.square(u_t + uPred*u_x + vPred*u_y + p_x - (1/re)*(u_xx + u_yy))
-    pde2    = tf.square(v_t + uPred*v_x + vPred*v_y + p_y - (1/re)*(v_xx + v_yy))
-    ww.set_shape([None])
-    pdeMse0 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde0,ww))
-    pdeMse1 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde1,ww))
-    pdeMse2 = keras.losses.mean_squared_error(0, tf.boolean_mask(pde2,ww))
+    nPdePoint = tf.reduce_sum(ww) + 1.0e-10
+    pde0    = u_x + v_y
+    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/re)*(u_xx + u_yy)
+    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/re)*(v_xx + v_yy)
+    pdeMse0 = tf.reduce_sum(tf.square(pde0) * ww) / nPdePoint
+    pdeMse1 = tf.reduce_sum(tf.square(pde1) * ww) / nPdePoint
+    pdeMse2 = tf.reduce_sum(tf.square(pde2) * ww) / nPdePoint
 
     # Compute domain wall loss
     uvpWallsPred = self([xyWallsStar, tWallsStar])
-    uMseWalls = keras.losses.mean_squared_error(uvWallsStar[:,0], uvpWallsPred[:,0])
-    vMseWalls = keras.losses.mean_squared_error(uvWallsStar[:,1], uvpWallsPred[:,1])
-    pMseWalls = keras.losses.mean_squared_error(0, uvpWallsPred[:,2])
+    nWallsPoint = nDataPoint + nPdePoint # ie the batch size
+    uMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,0])) / nWallsPoint
+    vMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,1])) / nWallsPoint
+    pMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,2])) / nWallsPoint
 
     return uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
 

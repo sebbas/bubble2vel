@@ -172,16 +172,26 @@ class BubbleDataSet:
       yield [xy, t, w], label
 
 
-  def prepare_batch_arrays(self):
+  def prepare_batch_arrays(self, zeroInitialCollocation=False):
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
-    colPntLabel = 0.0 # Label for collocation points
 
-    # Combine data points and collocation points arrays
-    zeros2D    = np.full((len(self.xyCol), self.dim), colPntLabel)
-    bcSamples  = np.concatenate((self.bc, zeros2D))
-    xytSamples = np.concatenate((self.xyBc, self.xyCol))
-    ones       = np.full((len(self.xyBc), 1), 1) # Indicates a data point
+    # Init collocation point labels with 0.0
+    if zeroInitialCollocation:
+      colPntLabel = 0.0
+      uvCol = np.full((len(self.xyCol), self.dim), colPntLabel)
+    else: # Init collocation point label with random values in range of min/max of data point label
+      minU, maxU = np.min(self.bc[:,0]), np.max(self.bc[:,0])
+      minV, maxV = np.min(self.bc[:,1]), np.max(self.bc[:,1])
+      samplesU = np.random.uniform(low=minU, high=maxU, size=len(self.xyCol))
+      samplesV = np.random.uniform(low=minV, high=maxV, size=len(self.xyCol))
+      samplesU = np.expand_dims(samplesU, axis=-1)
+      samplesV = np.expand_dims(samplesV, axis=-1)
+      uvCol = np.concatenate((samplesU, samplesV), axis=-1)
+
+    bcSamples  = np.concatenate((self.uvData, uvCol))
+    xytSamples = np.concatenate((self.xyData, self.xyCol))
+    ones       = np.full((len(self.xyData), 1), 1) # Indicates a data point
     zeros      = np.full((len(self.xyCol), 1), 0) # Indicates a collocation point
     idSamples  = np.concatenate((ones, zeros))
 

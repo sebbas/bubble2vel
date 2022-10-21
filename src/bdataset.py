@@ -217,15 +217,18 @@ class BubbleDataSet:
         s = begin
       if sW + batchSize > endW:
         sW = beginW
-      # Fill batch arrays
-      label[:, :] = self.labels[s:s+batchSize, :]
-      xy[:, :]    = self.xyt[s:s+batchSize, :self.dim]
-      t[:, 0]     = self.xyt[s:s+batchSize, self.dim]
-      id[:, 0]    = self.id[s:s+batchSize, 0]
+      e = s + batchSize
+      eW = sW + batchSize
 
-      labelW[:, :] = self.bcDomain[sW:sW+batchSize, :]
-      xyW[:, :]    = self.xyDomain[sW:sW+batchSize, :self.dim]
-      tW[:, 0]     = self.xyDomain[sW:sW+batchSize, self.dim]
+      # Fill batch arrays
+      label[:, :] = self.labels[s:e, :]
+      xy[:, :]    = self.xyt[s:e, :self.dim]
+      t[:, 0]     = self.xyt[s:e, self.dim]
+      id[:, 0]    = self.id[s:e, 0]
+
+      labelW[:, :] = self.bcDomain[sW:eW, :]
+      xyW[:, :]    = self.xyDomain[sW:eW, :self.dim]
+      tW[:, 0]     = self.xyDomain[sW:eW, self.dim]
 
       s  += batchSize
       sW += batchSize

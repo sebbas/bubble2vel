@@ -21,7 +21,8 @@ class BubbleDataSet:
   FLAG_BUBBLE = 1
   FLAG_VISITED = 1
 
-  def __init__(self, fName='', totalframes=0, bcdomainPoints=0, colPoints=0, startframe=0, dim=2):
+  def __init__(self, fName='', totalframes=0, startframe=0, dim=2, \
+               bcdomainPoints=0, colPoints=0, dataPoints=0):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
     self.dim          = dim
@@ -35,6 +36,7 @@ class BubbleDataSet:
     # Requested number of points
     self.nColPnt      = colPoints
     self.nBcDomainPnt = bcdomainPoints
+    self.nDataPnt       = dataPoints
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim]
     # Arrays to store processed data (after processing ground truth)
@@ -44,6 +46,8 @@ class BubbleDataSet:
     self.bcDomain = None # [nSamples, dim]
     self.xyDomain = None # [nSamples, dim + 1]
     self.xyCol    = None # [nColPnt,  dim + 1]
+    self.xyData   = None # [nDataPnt,  dim + 1]
+    self.uvData   = None # [nDataPnt,  dim + 1]
     # Arrays to store (shuffled) mix of data and collocation points
     self.labels   = None
     self.xyt      = None
@@ -189,6 +193,9 @@ class BubbleDataSet:
     self.labels  = bcSamples[p]
     self.xyt     = xytSamples[p]
     self.id      = idSamples[p]
+
+    assert len(self.labels) == len(self.xyt)
+    assert len(self.labels) == len(self.id)
 
     # Shuffle domain wall arrays
     pp = np.random.permutation(len(self.xyDomain))
@@ -336,8 +343,8 @@ class BubbleDataSet:
       s = e
 
 
-  def extract_data_points(self, velEps=0.1):
-    print('Extracting data points')
+  def extract_fluid_points(self, velEps=0.1):
+    print('Extracting bubble and fluid points')
 
     bcFrameLst = []
     xyFrameLst = []
@@ -478,6 +485,30 @@ class BubbleDataSet:
       sFl = eFl
 
 
+  def extract_data_points(self):
+    print('Extracting data points')
+    rng = np.random.default_rng(2022)
+
+    self.xyData = np.zeros((self.nDataPnt, self.dim + 1))
+    self.uvData = np.zeros((self.nDataPnt, self.dim))
+    nDataPntPerFrame = self.nDataPnt // self.nTotalFrames
+    s = 0
+    for frame in range(self.nTotalFrames):
+      Util.print_progress(frame, self.nTotalFrames)
+
+      # Get all data point coords and vels for the current frame
+      xyDataFrame = self.get_xy_bc(frame)
+      uvDataFrame = self.get_bc(frame)
+
+      # Insert random selection of data point coords into data point array
+      indices = np.arange(0, xyDataFrame.shape[0])
+      randIndices = rng.choice(indices, size=nDataPntPerFrame, replace=False)
+      e = s + nDataPntPerFrame
+      self.xyData[s:e, :] = xyDataFrame[randIndices, :]
+      self.uvData[s:e, :] = uvDataFrame[randIndices, :]
+      s = e
+
+
   def extract_collocation_points(self):
     print('Extracting collocation points')
     rng = np.random.default_rng(2022)
@@ -511,13 +542,14 @@ class BubbleDataSet:
     nSampleFluid  = np.sum(self.nFluid)
 
     fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_b{}_r{}_t{}_w{}.h5'.format( \
-              self.size[0], nSampleBc, self.nColPnt, self.nBcDomainPnt, self.colRes,
+              self.size[0], self.nDataPnt, self.nColPnt, self.nBcDomainPnt, self.colRes,
               self.nTotalFrames, Util.get_list_string(walls)))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']         = self.size
     dFile.attrs['frames']       = self.nTotalFrames
     dFile.attrs['nColPnt']      = self.nColPnt
     dFile.attrs['nBcDomainPnt'] = self.nBcDomainPnt
+    dFile.attrs['nDataPnt']     = self.nDataPnt
     dFile.attrs['nBcBubble']    = np.asarray(self.nBcBubble)
     dFile.attrs['nFluid']       = np.asarray(self.nFluid)
 
@@ -537,6 +569,10 @@ class BubbleDataSet:
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyDomain)
     dFile.create_dataset('xyCol', (self.nColPnt, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyCol)
+    dFile.create_dataset('xyData', (self.nDataPnt, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyData)
+    dFile.create_dataset('uvData', (self.nDataPnt, self.dim), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.uvData)
 
     dFile.close()
     print('Saved dataset to file {}'.format(fname))
@@ -554,6 +590,7 @@ class BubbleDataSet:
     self.nBcBubble    = dFile.attrs['nBcBubble']
     self.nFluid       = dFile.attrs['nFluid']
     self.nBcDomainPnt = dFile.attrs['nBcDomainPnt']
+    self.nDataPnt     = dFile.attrs['nDataPnt']
 
     self.bc       = np.array(dFile.get('bc'))
     self.xyBc     = np.array(dFile.get('xyBc'))
@@ -561,6 +598,8 @@ class BubbleDataSet:
     self.bcDomain = np.array(dFile.get('bcDomain'))
     self.xyDomain = np.array(dFile.get('xyDomain'))
     self.xyCol    = np.array(dFile.get('xyCol'))
+    self.xyData   = np.array(dFile.get('xyData'))
+    self.uvData   = np.array(dFile.get('uvData'))
 
     self.isLoaded = True
     dFile.close()
@@ -569,15 +608,18 @@ class BubbleDataSet:
 
 
   def get_num_wall_pts(self):
+    assert len(self.xyDomain) == self.nBcDomainPnt
     return len(self.xyDomain)
 
 
   def get_num_data_pts(self):
-    return len(self.xyBc)
+    assert len(self.xyData) == self.nDataPnt
+    return self.nDataPnt
 
 
   def get_num_col_pts(self):
-    return len(self.xyCol)
+    assert len(self.xyCol) == self.nColPnt
+    return self.nColPnt
 
 
   def get_num_fluid(self, fromFrame, toFrame):

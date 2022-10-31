@@ -121,8 +121,8 @@ class BubblePINN(keras.Model):
     ww      = 1.0 - w
     nPdePoint = tf.reduce_sum(ww) + 1.0e-10
     pde0    = u_x + v_y
-    pde1    = u_t + uvpPred[:,0]*u_x + uvpPred[:,1]*u_y + p_x - (1/self.Re)*(u_xx + u_yy)
-    pde2    = v_t + uvpPred[:,0]*v_x + uvpPred[:,1]*v_y + p_y - (1/self.Re)*(v_xx + v_yy)
+    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/self.Re)*(u_xx + u_yy)
+    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/self.Re)*(v_xx + v_yy)
     pdeMse0 = tf.reduce_sum(tf.square(pde0) * ww) / nPdePoint
     pdeMse1 = tf.reduce_sum(tf.square(pde1) * ww) / nPdePoint
     pdeMse2 = tf.reduce_sum(tf.square(pde2) * ww) / nPdePoint

@@ -92,17 +92,14 @@ nTrainW   = nSamplesW - nValidW
 
 print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
 print('{} domain wall points in training, {} in validation'.format(nTrainW, nValidW))
-assert nValid > 0 and nValidW > 0, 'Number of validation samples must be greater than 0'
-
-# Domain specific constants, must match dataset contents!
-FPS         = 400                # [frames/sec]
-PIXEL_SIZE  = 1.922e-5           # [meters] at resolution 1024px
-DOMAIN_SIZE = PIXEL_SIZE * 1024  # [meters]
-IMG_SIZE    = dataSet.get_size() # [pixels]
 
 # Generators
-trainGen = dataSet.generate_train_valid_batch(0, nTrain, 0, nTrainW, normalizeXyt=False, batchSize=args.batchSize)
-validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSamplesW, normalizeXyt=False, batchSize=args.batchSize)
+trainGen = dataSet.generate_train_valid_batch(0, nTrain, 0, nTrainW, \
+                                              UT.worldSize, UT.fps, UT.V, UT.L, UT.T, \
+                                              batchSize=args.batchSize)
+validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSamplesW, \
+                                              UT.worldSize, UT.fps, UT.V, UT.L, UT.T, \
+                                              batchSize=args.batchSize)
 
 # Create model
 modelName = args.name + archStr + '_d{}_c{}_a{}_b{}_g{}_lr{}_p{}'.format( \
@@ -113,8 +110,7 @@ modelName = args.name + archStr + '_d{}_c{}_a{}_b{}_g{}_lr{}_p{}'.format( \
 
 #with BM.strategy.scope():
 bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg,
-                          alpha=args.alpha, beta=args.beta, gamma=args.gamma,
-                          fps=FPS, domainSize=DOMAIN_SIZE, imgSize=IMG_SIZE)
+                          alpha=args.alpha, beta=args.beta, gamma=args.gamma, Re=UT.Re)
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 
 bubbleNet.preview()

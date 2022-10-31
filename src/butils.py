@@ -9,6 +9,24 @@ import subprocess
 PRINT_DEBUG = 0
 IMG_DEBUG = 1
 
+# Reference quantities for non-dimensionalization
+V   = 1                       # [meters/sec],  Reference velocity
+L   = 0.01                    # [meters],      Reference length
+T   = L / V                   # [sec],         Reference time
+_nu = 2.938e-7                # [m^2/sec],     Kinematic viscosity at 100 Celsius
+Re  = (V * L) / _nu           # dimensionless, Reynolds number
+
+
+# World space quantities
+fps       = 400               # [frames/sec]
+pixelSize = 1.922e-5          # [meters] at resolution 1024px
+worldSize = pixelSize * 1024  # [meters], must mult with res that the pixel size was captured at
+
+
+# Domain space quantities
+nDim = 2
+imageSize = 512
+
 
 def _ensure_exists(dir):
   if not os.path.exists(dir):
@@ -83,5 +101,39 @@ def get_arch_string(arch):
     archStr = archStr + '-{}x{}'.format(l0, nSameSize)
   return archStr
 
+
 def get_list_string(list, delim=''):
   return delim.join(map(str, list))
+
+
+def vel_domain_to_world(input, worldSize, fps):
+  return input * (fps * (worldSize / imageSize))
+
+
+def pos_domain_to_world(input, worldSize):
+  return input * (worldSize / imageSize)
+
+
+def time_domain_to_world(input, fps):
+  return input * (1 / fps)
+
+
+def vel_world_to_dimensionless(input, V):
+  return input / V
+
+
+def pos_world_to_dimensionless(input, L):
+  return input / L
+
+
+def time_world_to_dimensionless(input, tau):
+  return input / tau
+
+
+def vel_dimensionless_to_world(input, V):
+  return input * V
+
+
+def vel_world_to_domain(input, worldSize, fps):
+  return input / (fps * (worldSize / imageSize))
+

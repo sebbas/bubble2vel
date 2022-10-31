@@ -18,8 +18,11 @@ strategy = tf.distribute.MirroredStrategy()
 class BubblePINN(keras.Model):
   def __init__(self, width=[256, 256, 256, 128, 128, 128, 64, 32, 3],\
                alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1.0, 1.0, 1.0],\
-               reg=None, saveGradStat=False, fps=400, domainSize=0.03, imgSize=512, **kwargs):
+               reg=None, saveGradStat=False, Re=3.5e4, **kwargs):
     super(BubblePINN, self).__init__(**kwargs)
+    print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format(
+          alpha, beta, gamma, Re))
+
     self.width = width
     self.reg   = reg
     if reg == None:
@@ -30,11 +33,7 @@ class BubblePINN(keras.Model):
     self.alpha = alpha
     self.beta  = beta
     self.gamma = gamma
-    # Domain constants
-    self.fps        = fps
-    self.domainSize = domainSize
-    self.imgSize    = imgSize
-
+    self.Re    = Re
     # ---- dicts for metrics and statistics ---- #
     # Save gradients' statistics per layer
     self.saveGradStat = saveGradStat
@@ -85,78 +84,51 @@ class BubblePINN(keras.Model):
 
 
   def compute_losses(self, xy, t, w, uv, xyWalls, tWalls, uvWalls):
-    # Factors to convert from domain space to world space
-    velConversion  = (self.fps) * (self.domainSize / self.imgSize)
-    posConversion  = (self.domainSize / self.imgSize)
-    timeConversion = 1 / self.fps
-    # Convert uv, xy and t from domain space to world space
-    uvWorld = uv * velConversion
-    xyWorld = xy * posConversion
-    tWorld  = t  * timeConversion
-    uvWallsWorld = uvWalls * velConversion
-    xyWallsWorld = xyWalls * posConversion
-    tWallsWorld  = tWalls  * timeConversion
-
-    # Reference quantities for non-dimensionalization
-    V   = 1            # [meters/sec],  Reference velocity
-    L   = 0.01         # [meters],      Reference length
-    tau = L / V        # [sec],         Reference time
-    nu  = 2.938e-7     # [m^2/sec],     Kinematic viscosity at 100 Celsius
-    re  = (V * L) / nu # dimensionless, Reynolds number
-
-    # Non-dimensionalize uv, xy and t
-    uvStar = uvWorld / V
-    xyStar = xyWorld / L
-    tStar  = tWorld  / tau
-    uvWallsStar = uvWallsWorld / V
-    xyWallsStar = xyWallsWorld / L
-    tWallsStar  = tWallsWorld  / tau
-
     # Track computation for 2nd derivatives for u, v
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
-      tape2.watch(xyStar)
+      tape2.watch(xy)
       with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape1:
-        tape1.watch(xyStar)
-        tape1.watch(tStar)
-        uvpPred = self([xyStar, tStar])
-        uPred  = uvpPred[:,0]
-        vPred  = uvpPred[:,1]
-        pPred  = uvpPred[:,2]
+        tape1.watch(xy)
+        tape1.watch(t)
+        uvpPred = self([xy, t])
+        uPred   = uvpPred[:,0]
+        vPred   = uvpPred[:,0]
+        pPred   = uvpPred[:,1]
       # 1st order derivatives
-      u_grad = tape1.gradient(uPred, xyStar)
-      v_grad = tape1.gradient(vPred, xyStar)
-      p_grad = tape1.gradient(pPred, xyStar)
+      u_grad = tape1.gradient(uPred, xy)
+      v_grad = tape1.gradient(vPred, xy)
+      p_grad = tape1.gradient(pPred, xy)
       u_x, u_y = u_grad[:,0], u_grad[:,1]
       v_x, v_y = v_grad[:,0], v_grad[:,1]
       p_x, p_y = p_grad[:,0], p_grad[:,1]
-      u_t = tape1.gradient(uPred,  tStar)
-      v_t = tape1.gradient(vPred,  tStar)
+      u_t = tape1.gradient(uPred, t)
+      v_t = tape1.gradient(vPred, t)
       del tape1
     # 2nd order derivatives
-    u_xx = tape2.gradient(u_x, xyStar)[:,0]
-    u_yy = tape2.gradient(u_y, xyStar)[:,1]
-    v_xx = tape2.gradient(v_x, xyStar)[:,0]
-    v_yy = tape2.gradient(v_y, xyStar)[:,1]
+    u_xx = tape2.gradient(u_x, xy)[:,0]
+    u_yy = tape2.gradient(u_y, xy)[:,1]
+    v_xx = tape2.gradient(v_x, xy)[:,0]
+    v_yy = tape2.gradient(v_y, xy)[:,1]
     del tape2
 
     # Compute data loss
     w = tf.squeeze(w)
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMse  = tf.reduce_sum(w * tf.square(uvpPred[:,0] - uvStar[:,0])) / nDataPoint
-    vMse  = tf.reduce_sum(w * tf.square(uvpPred[:,1] - uvStar[:,1])) / nDataPoint
+    uMse  = tf.reduce_sum(w * tf.square(uPred - uv[:,0])) / nDataPoint
+    vMse  = tf.reduce_sum(w * tf.square(vPred - uv[:,1])) / nDataPoint
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
     ww      = 1.0 - w
     nPdePoint = tf.reduce_sum(ww) + 1.0e-10
     pde0    = u_x + v_y
-    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/re)*(u_xx + u_yy)
-    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/re)*(v_xx + v_yy)
+    pde1    = u_t + uvpPred[:,0]*u_x + uvpPred[:,1]*u_y + p_x - (1/self.Re)*(u_xx + u_yy)
+    pde2    = v_t + uvpPred[:,0]*v_x + uvpPred[:,1]*v_y + p_y - (1/self.Re)*(v_xx + v_yy)
     pdeMse0 = tf.reduce_sum(tf.square(pde0) * ww) / nPdePoint
     pdeMse1 = tf.reduce_sum(tf.square(pde1) * ww) / nPdePoint
     pdeMse2 = tf.reduce_sum(tf.square(pde2) * ww) / nPdePoint
 
     # Compute domain wall loss
-    uvpWallsPred = self([xyWallsStar, tWallsStar])
+    uvpWallsPred = self([xyWalls, tWalls])
     nWallsPoint = nDataPoint + nPdePoint # ie the batch size
     uMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,0])) / nWallsPoint
     vMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,1])) / nWallsPoint
@@ -180,8 +152,8 @@ class BubblePINN(keras.Model):
       uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
         self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
       # replica's loss, divided by global batch size
-      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse
-              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2
+      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
+              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
               + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
       loss += tf.add_n(self.losses)
       loss  = loss #/ strategy.num_replicas_in_sync

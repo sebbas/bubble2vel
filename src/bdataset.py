@@ -36,7 +36,7 @@ class BubbleDataSet:
     # Requested number of points
     self.nColPnt      = colPoints
     self.nBcDomainPnt = bcdomainPoints
-    self.nDataPnt       = dataPoints
+    self.nDataPnt     = dataPoints
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim]
     # Arrays to store processed data (after processing ground truth)
@@ -141,14 +141,11 @@ class BubbleDataSet:
     print('--------------------------------')
 
 
-  def generate_predict_pts(self, begin, end, onlyFluid=True, normalizeXyt=True):
+  def generate_predict_pts(self, begin, end, worldSize, fps, L, T, onlyBc=False):
     print('Generating prediction points')
-    sizeX, sizeY = self.size
 
     for frame in range(begin, end):
-      gridXyt   = [(x,y,frame) for x in range(sizeX) for y in range(sizeY)]
-      #loopArray = self.xyFluid[:self.nFluid[frame], :] if onlyFluid else gridXyt
-      loopArray = self.get_xy_fluid(frame) if onlyFluid else gridXyt
+      loopArray = self.get_xy_bc(frame) if onlyBc else self.get_xy_fluid(frame)
       tmpLst    = [pos for pos in loopArray]
       nGridPnt  = len(tmpLst)
 
@@ -161,15 +158,18 @@ class BubbleDataSet:
 
       # Fill batch arrays
       tmpArr   = np.asarray(tmpLst, dtype=float)
-      xy[:, :] =  tmpArr[:, :self.dim]
+      xy[:, :] = tmpArr[:, :self.dim]
       t[:, 0]  = tmpArr[:, self.dim]
 
-      # Normalization
-      if normalizeXyt:
-        xy[:,] /= self.size
-        t[:,] /= self.nTotalFrames
+      # Convert from domain space to world space
+      pos  = UT.pos_domain_to_world(xy, worldSize)
+      time = UT.time_domain_to_world(t, fps)
 
-      yield [xy, t, w], label
+      # Convert from world space to dimensionless quantities
+      pos  = UT.pos_world_to_dimensionless(pos, L)
+      time = UT.time_world_to_dimensionless(time, T)
+
+      yield [pos, time, w], label
 
 
   def prepare_batch_arrays(self, zeroInitialCollocation=False):
@@ -213,10 +213,10 @@ class BubbleDataSet:
     self.bcDomain = self.bcDomain[pp]
 
 
-  def generate_train_valid_batch(self, begin, end, beginW, endW,
-                                 normalizeXyt=True, batchSize=64, shuffle=True):
+  def generate_train_valid_batch(self, begin, end, beginW, endW, worldSize, fps, \
+                                 V, L, T, batchSize=64, shuffle=True):
     generatorType = 'training' if begin == 0 else 'validation'
-    print('\nGenerating {} sample {} batch'.format(batchSize, generatorType))
+    print('\nGenerating {} sample {} batches'.format(batchSize, generatorType))
 
     # Arrays to store data + collocation point batch
     label  = np.zeros((batchSize, self.dim), dtype=float)
@@ -242,20 +242,13 @@ class BubbleDataSet:
       xy[:, :]    = self.xyt[s:e, :self.dim]
       t[:, 0]     = self.xyt[s:e, self.dim]
       id[:, 0]    = self.id[s:e, 0]
-
-      labelW[:, :] = self.bcDomain[sW:eW, :]
-      xyW[:, :]    = self.xyDomain[sW:eW, :self.dim]
-      tW[:, 0]     = self.xyDomain[sW:eW, self.dim]
+      if endW > 0:
+        labelW[:, :] = self.bcDomain[sW:eW, :]
+        xyW[:, :]    = self.xyDomain[sW:eW, :self.dim]
+        tW[:, 0]     = self.xyDomain[sW:eW, self.dim]
 
       s  += batchSize
       sW += batchSize
-
-      # Normalization
-      if normalizeXyt:
-        xy[:,]  /= self.size
-        t[:,]   /= self.nTotalFrames
-        xyW[:,] /= self.size
-        tW[:,]  /= self.nTotalFrames
 
       # Shuffle batch
       if shuffle:
@@ -268,7 +261,23 @@ class BubbleDataSet:
         xyW    = xyW[p]
         labelW = labelW[p]
 
-      yield [xy, t, id, xyW, tW, labelW], label
+      # Convert from domain space to world space
+      vel   = UT.vel_domain_to_world(label, worldSize, fps)
+      pos   = UT.pos_domain_to_world(xy, worldSize)
+      time  = UT.time_domain_to_world(t, fps)
+      velW  = UT.vel_domain_to_world(labelW, worldSize, fps)
+      posW  = UT.pos_domain_to_world(xyW, worldSize)
+      timeW = UT.time_domain_to_world(tW, fps)
+
+      # Convert from world space to dimensionless quantities
+      vel   = UT.vel_world_to_dimensionless(vel, V)
+      pos   = UT.pos_world_to_dimensionless(pos, L)
+      time  = UT.time_world_to_dimensionless(time, T)
+      velW  = UT.vel_world_to_dimensionless(velW, V)
+      posW  = UT.pos_world_to_dimensionless(posW, L)
+      timeW = UT.time_world_to_dimensionless(timeW, T)
+
+      yield [pos, time, id, posW, timeW, velW], vel
 
 
   # Define solid domain borders: walls = [top, right, bottom, left]
@@ -672,4 +681,24 @@ class BubbleDataSet:
     e = s + self.nBcBubble[frame]
     return self.bc[s:e, ...]
 
+
+  def get_xy_data(self, frame):
+    ptsPerFrame = (self.nDataPnt // self.nTotalFrames)
+    s = ptsPerFrame * frame
+    e = s + ptsPerFrame
+    return self.xyData[s:e, ...]
+
+
+  def get_xy_col(self, frame):
+    ptsPerFrame = (self.nColPnt // self.nTotalFrames)
+    s = ptsPerFrame * frame
+    e = s + ptsPerFrame
+    return self.xyCol[s:e, ...]
+
+
+  def get_xy_bcdomain(self, frame):
+    ptsPerFrame = (self.nBcDomainPnt // self.nTotalFrames)
+    s = ptsPerFrame * frame
+    e = s + ptsPerFrame
+    return self.xyDomain[s:e, ...]
 

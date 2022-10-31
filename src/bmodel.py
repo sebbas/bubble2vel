@@ -185,9 +185,9 @@ class BubblePINN(keras.Model):
     self.trainMetrics['vMseWalls'].update_state(vMseWalls)
     self.trainMetrics['pMseWalls'].update_state(pMseWalls)
     w = tf.squeeze(w)
-    w.set_shape([None])
-    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvpPred[:,0],w))
-    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvpPred[:,1],w))
+    nDataPoint = tf.reduce_sum(w) + 1.0e-10
+    uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
+    vMae = tf.reduce_sum(tf.abs((uvpPred[:,1] - uv[:,1]) * w)) / nDataPoint
     self.trainMetrics['uMae'].update_state(uMae)
     self.trainMetrics['vMae'].update_state(vMae)
     # track gradients coefficients
@@ -233,9 +233,9 @@ class BubblePINN(keras.Model):
     self.validMetrics['vMseWalls'].update_state(vMseWalls)
     self.validMetrics['pMseWalls'].update_state(pMseWalls)
     w = tf.squeeze(w)
-    w.set_shape([None])
-    uMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,0],w), tf.boolean_mask(uvpPred[:,0],w))
-    vMae = tf.keras.metrics.mean_absolute_error(tf.boolean_mask(uv[:,1],w), tf.boolean_mask(uvpPred[:,1],w))
+    nDataPoint = tf.reduce_sum(w) + 1.0e-10
+    uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
+    vMae = tf.reduce_sum(tf.abs((uvpPred[:,1] - uv[:,1]) * w)) / nDataPoint
     self.validMetrics['uMae'].update_state(uMae)
     self.validMetrics['vMae'].update_state(vMae)
 

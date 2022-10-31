@@ -9,7 +9,6 @@ tf.random.set_seed(2022)
 
 from tensorflow import keras
 from blayers import *
-import butils as Util
 
 
 ''' --- TODO ---

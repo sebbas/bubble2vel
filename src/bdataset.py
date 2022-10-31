@@ -9,7 +9,7 @@ import numpy as np
 import random as rn
 import tensorflow as tf
 
-import butils as Util
+import butils as UT
 
 rn.seed(2022)
 np.random.seed(2022)
@@ -96,14 +96,14 @@ class BubbleDataSet:
           maxVel = np.zeros(self.dim)
           maxVel[0] = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
           maxVel[1] = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
-          if Util.PRINT_DEBUG:
+          if UT.PRINT_DEBUG:
             print('Max vel [{}, {}]'.format(maxVel[0], maxVel[1]))
           norm = maxVel
         # Normalize with image width and height
         else:
           norm = self.size
 
-        if Util.PRINT_DEBUG:
+        if UT.PRINT_DEBUG:
           u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
           v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
           print('Before normalization max vel [{}, {}]'.format(u, v))
@@ -112,12 +112,12 @@ class BubbleDataSet:
         self.vel[:,:,:,0] /= norm[0]
         self.vel[:,:,:,1] /= norm[1]
 
-        if Util.PRINT_DEBUG:
+        if UT.PRINT_DEBUG:
           u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
           v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
           print('After normalization max vel [{}, {}]'.format(u, v))
       else:
-        if Util.PRINT_DEBUG:
+        if UT.PRINT_DEBUG:
           u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
           v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
           print('No normalization, max vel [{}, {}]'.format(u, v))
@@ -282,14 +282,14 @@ class BubbleDataSet:
     sizeX, sizeY = self.size
 
     for frame in range(self.nTotalFrames):
-      Util.print_progress(frame, self.nTotalFrames)
+      UT.print_progress(frame, self.nTotalFrames)
 
       bcCondition = 0. # zero vel at boundary
       bcLst = []
       xyLst = []
 
       if not sum(walls):
-        if UTIL.PRINT_DEBUG: print('Warning frame %d: All domain walls open. Returning early' % frame)
+        if UT.PRINT_DEBUG: print('Warning frame %d: All domain walls open. Returning early' % frame)
         return
 
       # Top domain wall
@@ -323,18 +323,18 @@ class BubbleDataSet:
       bcFrameLst.append(bcLst)
       xyFrameLst.append(xyLst)
 
-      if Util.IMG_DEBUG:
+      if UT.IMG_DEBUG:
         debugGrid = np.zeros((self.size), dtype=int)
         for x, y in xyLst:
           debugGrid[x,y] = 1
-        Util.save_image(src=debugGrid, subdir='extract', name='domainPts_extract', frame=frame, origin='upper')
+        UT.save_image(src=debugGrid, subdir='extract', name='domainPts_extract', frame=frame, origin='upper')
 
     self.bcDomain = np.zeros((self.nBcDomainPnt, self.dim))
     self.xyDomain = np.zeros((self.nBcDomainPnt, self.dim + 1))
     nBcDomainPntPerFrame = self.nBcDomainPnt // self.nTotalFrames
     s = 0
     for frame in range(self.nTotalFrames):
-      Util.print_progress(frame, self.nTotalFrames)
+      UT.print_progress(frame, self.nTotalFrames)
       assert len(bcFrameLst[frame]) == len(xyFrameLst[frame]), 'Number of velocity labels must match number of xy positions'
 
       n = len(bcFrameLst[frame])
@@ -362,7 +362,7 @@ class BubbleDataSet:
     sizeX, sizeY = self.size
 
     for frame in range(self.nTotalFrames):
-      Util.print_progress(frame, self.nTotalFrames)
+      UT.print_progress(frame, self.nTotalFrames)
 
       bcLst = []
       xyLst = []
@@ -431,10 +431,10 @@ class BubbleDataSet:
               flags[i,j] = self.FLAG_FLUID
               intersection[i,j] = 0
 
-      if Util.IMG_DEBUG:
-        Util.save_image(src=flags, subdir='extract', name='flags_extract', frame=frame)
-        Util.save_image(src=intersection, subdir='extract', name='bubblePts_extract', frame=frame)
-        Util.save_image(src=mag, subdir='extract', name='magnitude_extract', frame=frame)
+      if UT.IMG_DEBUG:
+        UT.save_image(src=flags, subdir='extract', name='flags_extract', frame=frame)
+        UT.save_image(src=intersection, subdir='extract', name='bubblePts_extract', frame=frame)
+        UT.save_image(src=mag, subdir='extract', name='magnitude_extract', frame=frame)
 
       # Add bubble border velocities to bc list
       curVels = self.vel[frame, :, :, :]
@@ -460,8 +460,9 @@ class BubbleDataSet:
       self.nBcBubble.append(len(xyLst))
       self.nFluid.append(len(xyFluidLst))
 
-    if Util.PRINT_DEBUG:
+    if UT.PRINT_DEBUG:
       print('Total number of bubble boundary samples: {}'.format(np.sum(self.nBcBubble)))
+      print('Total number of fluid samples: {}'.format(np.sum(self.nFluid)))
 
     # Allocate arrays for preprocessed data ...
     self.bc   = np.zeros((np.sum(self.nBcBubble), self.dim),     dtype=float)
@@ -471,7 +472,7 @@ class BubbleDataSet:
     # ... and insert data from lists
     s, sFl = 0, 0
     for frame in range(self.nTotalFrames):
-      Util.print_progress(frame, self.nTotalFrames)
+      UT.print_progress(frame, self.nTotalFrames)
       assert len(bcFrameLst[frame]) == len(xyFrameLst[frame]), 'Number of velocity labels must match number of xy positions'
 
       # Insertion of bc and xyBc lists
@@ -504,7 +505,7 @@ class BubbleDataSet:
     nDataPntPerFrame = self.nDataPnt // self.nTotalFrames
     s = 0
     for frame in range(self.nTotalFrames):
-      Util.print_progress(frame, self.nTotalFrames)
+      UT.print_progress(frame, self.nTotalFrames)
 
       # Get all data point coords and vels for the current frame
       xyDataFrame = self.get_xy_bc(frame)
@@ -527,7 +528,7 @@ class BubbleDataSet:
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
     s = 0
     for frame in range(self.nTotalFrames):
-      Util.print_progress(frame, self.nTotalFrames)
+      UT.print_progress(frame, self.nTotalFrames)
 
       # Get all fluid coords for the current frame
       xyFluidFrame = self.get_xy_fluid(frame)
@@ -537,6 +538,8 @@ class BubbleDataSet:
       xyFluidFrameMasked = xyFluidFrame[mask]
 
       # Insert random selection of fluid coords into collocation array
+      if UT.PRINT_DEBUG:
+        print('Taking {} collocation points out of {} available'.format(nColPntPerFrame, xyFluidFrameMasked.shape[0]))
       indices = np.arange(0, xyFluidFrameMasked.shape[0])
       randIndices = rng.choice(indices, size=nColPntPerFrame, replace=False)
       e = s + nColPntPerFrame
@@ -553,7 +556,7 @@ class BubbleDataSet:
 
     fname = os.path.join(dir, filePrefix + '_{}_d{}_c{}_b{}_r{}_t{}_w{}.h5'.format( \
               self.size[0], self.nDataPnt, self.nColPnt, self.nBcDomainPnt, self.colRes,
-              self.nTotalFrames, Util.get_list_string(walls)))
+              self.nTotalFrames, UT.get_list_string(walls)))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']         = self.size
     dFile.attrs['frames']       = self.nTotalFrames

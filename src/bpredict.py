@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 import bdataset as BD
 import bmodel as BM
-import butils as Util
+import butils as UT
 
 parser = argparse.ArgumentParser()
 
@@ -42,7 +42,7 @@ nDim = 2
 onlyFluid = not args.plotDomain
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(nDim + 1)
+args.architecture.append(UT.nDim + 1)
 
 dataSet = BD.BubbleDataSet()
 dataSet.restore(args.file)
@@ -165,7 +165,7 @@ for frame in range(predStart, predEnd):
     ax.set_xlim(0, size[0])
     ax.set_ylim(0, size[1])
     ax.invert_yaxis()
-    Util.save_figure_plot(fig, 'predvels', 'predvels', frame, colorbar=True, plot=plot, cmin=0, cmax=0.4)
+    UT.save_figure_plot(fig, 'predvels', 'predvels', frame, colorbar=True, plot=plot, cmin=0, cmax=25.0)
 
     # Plot with matplotlib streamplot
     fig, ax = plt.subplots(1, 1, figsize=(10,10))
@@ -178,13 +178,13 @@ for frame in range(predStart, predEnd):
     ax.set_xlim(0, size[0])
     ax.set_ylim(0, size[1])
     ax.invert_yaxis()
-    Util.save_figure_plot(fig, 'predvels', 'predvels_stream', frame)
+    UT.save_figure_plot(fig, 'predvels', 'predvels_stream', frame)
 
 # Optional video export with ffmpeg
 if args.exportVideo:
-  Util.save_video(subdir='origvels', name='origvels', imgDir='../img/origvels/', fps=15)
-  Util.save_video(subdir='predvels', name='predvels', imgDir='../img/predvels/', fps=15)
-  Util.save_video(subdir='origvels', name='origvels_pts', imgDir='../img/origvels/', fps=15)
-  Util.save_video(subdir='predvels', name='predvels_pts', imgDir='../img/predvels/', fps=15)
-  Util.save_video(subdir='predvels', name='predvels_stream', imgDir='../img/predvels/', fps=15)
+  UT.save_video(subdir='origvels', name='origvels', imgDir='../img/origvels/', fps=15)
+  UT.save_video(subdir='predvels', name='predvels', imgDir='../img/predvels/', fps=15)
+  UT.save_video(subdir='origvels', name='origvels_pts', imgDir='../img/origvels/', fps=15)
+  UT.save_video(subdir='predvels', name='predvels_pts', imgDir='../img/predvels/', fps=15)
+  UT.save_video(subdir='predvels', name='predvels_stream', imgDir='../img/predvels/', fps=15)
 

@@ -23,7 +23,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 import bdataset as BD
 import bmodel as BM
-import butils as Util
+import butils as UT
 
 keras.backend.set_floatx('float32')
 
@@ -70,8 +70,7 @@ parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
 
 args = parser.parse_args()
 
-nDim = 2
-archStr = Util.get_arch_string(args.architecture)
+archStr = UT.get_arch_string(args.architecture)
 
 # Restore dataset with data from generated .h5 file
 assert args.file.endswith('.h5')
@@ -80,7 +79,7 @@ dataSet.restore(args.file)
 dataSet.prepare_batch_arrays()
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(nDim + 1)
+args.architecture.append(UT.nDim + 1)
 
 # Create training and validation (data + collocation points)
 nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()
@@ -108,9 +107,9 @@ validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSample
 # Create model
 modelName = args.name + archStr + '_d{}_c{}_a{}_b{}_g{}_lr{}_p{}'.format( \
               dataSet.get_num_data_pts(), dataSet.get_num_col_pts(), \
-              Util.get_list_string(args.alpha, delim='-'), \
-              Util.get_list_string(args.beta, delim='-'), \
-              Util.get_list_string(args.gamma, delim='-'), args.lr0, args.patience)
+              UT.get_list_string(args.alpha, delim='-'), \
+              UT.get_list_string(args.beta, delim='-'), \
+              UT.get_list_string(args.gamma, delim='-'), args.lr0, args.patience)
 
 #with BM.strategy.scope():
 bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg,
@@ -145,11 +144,11 @@ bubbleNet.fit(
       validation_steps=nValid//args.batchSize,
       verbose=True,
       callbacks=bubbleCB)
-#bubbleNet.summary()
+bubbleNet.summary()
 
 # Loss plot
 losses = pd.DataFrame(bubbleNet.history.history)
 fig = losses.plot().get_figure()
-Util.save_figure_dataframe(losses, fig, 'stats', 'losses')
+UT.save_figure_dataframe(losses, fig, 'stats', 'losses')
 
 

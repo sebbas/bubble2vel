@@ -20,7 +20,7 @@ class BubblePINN(keras.Model):
                alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1.0, 1.0, 1.0],\
                reg=None, saveGradStat=False, Re=3.5e4, **kwargs):
     super(BubblePINN, self).__init__(**kwargs)
-    print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format(
+    print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \
           alpha, beta, gamma, Re))
 
     self.width = width

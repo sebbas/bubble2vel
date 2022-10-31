@@ -417,9 +417,9 @@ class BubbleDataSet:
             # Cut-off based on velocity, ie if neighbor has no vel it is fluid
             if mag[ni, nj] < velEps:
               stack.append(n) # Add fluid cell to stack, it needs to be searched next
-              flags[n[0], n[1]] = self.FLAG_FLUID
+              flags[ni, nj] = self.FLAG_FLUID
             else:
-              intersection[n[0], n[1]] = 1 # Mark this cell in boundary condition mask
+              intersection[ni, nj] = 1 # Mark this cell in boundary condition mask
 
       # Smooth out single pixels
       for iter in range(1): # Number of smoothing passes

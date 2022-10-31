@@ -148,8 +148,8 @@ for frame in range(predStart, predEnd):
     Util.save_image(src=predvelMag, subdir='predvels', name='predvels_pts', frame=frame)
     Util.save_image(src=predPGrid, subdir='predvels', name='predp_pts', frame=frame)
 
-    predVelsU = predvelGrid[::arrow_res, ::arrow_res, 0]
-    predVelsV = predvelGrid[::arrow_res, ::arrow_res, 1]
+    predVelsU  = predvelGrid[::arrow_res, ::arrow_res, 0]
+    predVelsV  = predvelGrid[::arrow_res, ::arrow_res, 1]
     predvelMag = predvelMag[::arrow_res, ::arrow_res]
 
     mask = predvelMag > 0.0

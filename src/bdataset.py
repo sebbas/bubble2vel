@@ -528,6 +528,13 @@ class BubbleDataSet:
       self.uvData[s:e, :] = uvDataFrame[randIndices, :]
       s = e
 
+      if UT.IMG_DEBUG:
+        sizeX, sizeY = self.size
+        datapts = np.zeros((sizeX, sizeY), dtype=int)
+        for pos in xyDataFrame[randIndices, :]:
+          datapts[int(pos[0]), int(pos[1])] = 1
+        UT.save_image(src=datapts, subdir='extract', name='dataPts_extract', frame=frame)
+
 
   def extract_collocation_points(self):
     print('Extracting collocation points')
@@ -554,6 +561,13 @@ class BubbleDataSet:
       e = s + nColPntPerFrame
       self.xyCol[s:e, :] = xyFluidFrameMasked[randIndices, :]
       s = e
+
+      if UT.IMG_DEBUG:
+        sizeX, sizeY = self.size
+        colpts = np.zeros((sizeX, sizeY), dtype=int)
+        for pos in xyFluidFrameMasked[randIndices, :]:
+          colpts[int(pos[0]), int(pos[1])] = 1
+        UT.save_image(src=colpts, subdir='extract', name='colPts_extract', frame=frame)
 
 
   def save(self, dir='../data/', filePrefix='bdata', walls=[0,0,1,0]):
@@ -598,6 +612,18 @@ class BubbleDataSet:
 
     dFile.close()
     print('Saved dataset to file {}'.format(fname))
+
+    if UT.IMG_DEBUG:
+      sizeX, sizeY = self.size
+      allpts = np.zeros((sizeX, sizeY), dtype=int)
+      for frame in range(self.nTotalFrames):
+        for pos in self.get_xy_bcdomain(frame):
+          allpts[int(pos[0]), int(pos[1])] = 1
+        for pos in self.get_xy_data(frame):
+          allpts[int(pos[0]), int(pos[1])] = 1
+        for pos in self.get_xy_col(frame):
+          allpts[int(pos[0]), int(pos[1])] = 1
+        UT.save_image(src=allpts, subdir='extract', name='overlayPts_extract', frame=frame)
 
 
   def restore(self, fname):

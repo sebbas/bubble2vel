@@ -32,6 +32,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-l', '--architecture', type=int, nargs='*',
                     default=[100, 100, 100, 100, 50, 50, 50, 50],
                     help='size of each hidden layer')
+parser.add_argument('-w', '--walls', type=int, nargs=4, default=[0,0,1,0],
+                    help='domain walls, [top, right, bottom, left]')
 
 # Regularizer coefficients
 parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
@@ -64,6 +66,14 @@ parser.add_argument('-p', '--patience', type=int, default=200,
 parser.add_argument('-lr',  '--restartLr', type=float, default=None,
                      help='learning rate to restart training')
 
+# Numbers of data, collocation and wall points
+parser.add_argument('-b', '--nWallPnt', type=int, default=-1,
+                    help='number of boundary points in training, use all by default')
+parser.add_argument('-c', '--nColPoint', type=int, default=-1,
+                    help='number of collocation points in training')
+parser.add_argument('-d', '--nDataPoint', type=int, default=-1,
+                    help='number of data points in training, use all by default')
+
 # Save more info
 parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
                     help='save gradient statistics')
@@ -74,9 +84,10 @@ archStr = UT.get_arch_string(args.architecture)
 
 # Restore dataset with data from generated .h5 file
 assert args.file.endswith('.h5')
-dataSet = BD.BubbleDataSet()
+dataSet = BD.BubbleDataSet(wallPoints=args.nWallPnt, \
+                           colPoints=args.nColPoint, dataPoints=args.nDataPoint)
 dataSet.restore(args.file)
-dataSet.prepare_batch_arrays()
+dataSet.prepare_batch_arrays(zeroInitialCollocation=False)
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 1)

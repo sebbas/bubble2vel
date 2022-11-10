@@ -94,12 +94,17 @@ args.architecture.append(UT.nDim + 1)
 
 # Create training and validation (data + collocation points)
 nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()
-nValid   = int(nSamples * 0.1)
-nTrain   = nSamples - nValid
+nTrain   = int(nSamples * 0.9)
+# Ensure training samples fit evenly
+nTrain   = args.batchSize * round(nTrain / args.batchSize)
+nValid   = nSamples - nTrain
+
 # Split for domain wall points
 nSamplesW = dataSet.get_num_wall_pts()
-nValidW   = int(nSamplesW * 0.1)
-nTrainW   = nSamplesW - nValidW
+nTrainW   = int(nSamplesW * 0.9)
+# Ensure training samples fit evenly
+nTrainW   = args.batchSize * round(nTrainW / args.batchSize)
+nValidW   = nSamplesW - nTrainW
 
 print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
 print('{} domain wall points in training, {} in validation'.format(nTrainW, nValidW))

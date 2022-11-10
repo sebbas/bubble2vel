@@ -534,12 +534,19 @@ class BubbleDataSet:
       self.xyData = copy.deepcopy(self.xyBc)
       self.uvData = copy.deepcopy(self.bc)
       self.nDataPnt = len(self.xyData)
+      print('Using {} data points'.format(self.nDataPnt))
       return
 
-    # Else get a selection of points
+    # Else, use the exact number of points that was specified
+    nDataPntPerFrame = self.nDataPnt // self.nTotalFrames
+    # Update actual number of collocation points
+    self.nDataPnt = nDataPntPerFrame * self.nTotalFrames
+    # Allocate arrays based on actual number of points
     self.xyData = np.zeros((self.nDataPnt, self.dim + 1))
     self.uvData = np.zeros((self.nDataPnt, self.dim))
-    nDataPntPerFrame = self.nDataPnt // self.nTotalFrames
+
+    print('Using {} data points'.format(self.nDataPnt))
+
     s = 0
     for frame in range(self.nTotalFrames):
       UT.print_progress(frame, self.nTotalFrames)
@@ -574,8 +581,18 @@ class BubbleDataSet:
     if default:
       self.nColPnt = self.nTotalFrames * 5000
 
-    self.xyCol = np.zeros((self.nColPnt, self.dim + 1))
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
+    # Update actual number of points
+    self.nColPnt = nColPntPerFrame * self.nTotalFrames
+    # Allocate array based on actual number of points
+    self.xyCol = np.zeros((self.nColPnt, self.dim + 1))
+
+    print('Using {} collocation points'.format(self.nColPnt))
+
+    # Return early if no collocation points requested
+    if not self.nColPnt:
+      return
+
     s = 0
     for frame in range(self.nTotalFrames):
       UT.print_progress(frame, self.nTotalFrames)
@@ -613,12 +630,23 @@ class BubbleDataSet:
       self.xyWalls = copy.deepcopy(self.xyDomain)
       self.uvWalls = copy.deepcopy(self.bcDomain)
       self.nWallPnt = len(self.xyWalls)
+      print('Using {} wall points'.format(self.nWallPnt))
       return
 
-    # Else get a selection of points
+    # Else, use the exact number of points that was specified
+    nWallsPntPerFrame = self.nWallPnt // self.nTotalFrames
+    # Update actual number of points
+    self.nWallPnt = nWallsPntPerFrame * self.nTotalFrames
+    # Allocate arrays based on actual number of points
     self.xyWalls = np.zeros((self.nWallPnt, self.dim + 1))
     self.uvWalls = np.zeros((self.nWallPnt, self.dim))
-    nWallsPntPerFrame = self.nWallPnt // self.nTotalFrames
+
+    print('Using {} wall points'.format(self.nWallPnt))
+
+    # Return early if no points requested
+    if not self.nWallPnt:
+      return
+
     s = 0
     for frame in range(self.nTotalFrames):
       UT.print_progress(frame, self.nTotalFrames)

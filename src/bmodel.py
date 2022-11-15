@@ -17,7 +17,7 @@ strategy = tf.distribute.MirroredStrategy()
 
 class BubblePINN(keras.Model):
   def __init__(self, width=[256, 256, 256, 128, 128, 128, 64, 32, 3],\
-               alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1.0, 1.0, 1.0],\
+               alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 1e-4],\
                reg=None, saveGradStat=False, Re=3.5e4, **kwargs):
     super(BubblePINN, self).__init__(**kwargs)
     print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \

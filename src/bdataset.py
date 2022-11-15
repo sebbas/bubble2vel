@@ -530,6 +530,13 @@ class BubbleDataSet:
       sFl = eFl
 
 
+  def _save_image(self, xyArray, subdir, name, frame):
+    grid = np.zeros((self.size[0], self.size[1]), dtype=int)
+    for pos in xyArray:
+      grid[int(pos[0]), int(pos[1])] = 1
+    UT.save_image(src=grid, subdir=subdir, name=name, frame=frame)
+
+
   def select_data_points(self, all=False):
     print('Selecting data points')
     rng = np.random.default_rng(2022)
@@ -582,11 +589,7 @@ class BubbleDataSet:
       s = e
 
       if UT.IMG_DEBUG:
-        sizeX, sizeY = self.size
-        datapts = np.zeros((sizeX, sizeY), dtype=int)
-        for pos in xyDataFrame[randIndices, :]:
-          datapts[int(pos[0]), int(pos[1])] = 1
-        UT.save_image(src=datapts, subdir='extract', name='dataPts_extract', frame=frame)
+        self._save_image(xyDataFrameMasked[randIndices, :], 'extract', 'dataPts_extract', frame)
 
 
   def select_collocation_points(self, default=False):
@@ -634,11 +637,7 @@ class BubbleDataSet:
       s = e
 
       if UT.IMG_DEBUG:
-        sizeX, sizeY = self.size
-        colpts = np.zeros((sizeX, sizeY), dtype=int)
-        for pos in xyFluidFrameMasked[randIndices, :]:
-          colpts[int(pos[0]), int(pos[1])] = 1
-        UT.save_image(src=colpts, subdir='extract', name='colPts_extract', frame=frame)
+        self._save_image(xyFluidFrameMasked[randIndices, :], 'extract', 'colPts_extract', frame)
 
 
   def select_wall_points(self, all=False):
@@ -686,11 +685,7 @@ class BubbleDataSet:
       s = e
 
       if UT.IMG_DEBUG:
-        sizeX, sizeY = self.size
-        wallpts = np.zeros((sizeX, sizeY), dtype=int)
-        for pos in xyWallsFrame[randIndices, :]:
-          wallpts[int(pos[0]), int(pos[1])] = 1
-        UT.save_image(src=wallpts, subdir='extract', name='wallPts_extract', frame=frame)
+        self._save_image(xyWallsFrame[randIndices, :], 'extract', 'wallPts_extract', frame)
 
 
   def save(self, dir='../data/', filePrefix='bdata', walls=[0,0,1,0]):

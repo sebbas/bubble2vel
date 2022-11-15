@@ -317,7 +317,7 @@ class BubbleDataSet:
       bWLeft   = self.walls[3]-1 if self.walls[3] else 0
 
       # Boundary condition
-      bCTop, bCRight, bCBottom, bCLeft = [0, 0, 0]
+      bCTop, bCRight, bCBottom, bCLeft = [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]
 
       # Using origin 'upper', x going down, y going right
       # Top domain wall

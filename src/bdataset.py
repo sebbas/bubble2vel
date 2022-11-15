@@ -658,7 +658,7 @@ class BubbleDataSet:
     self.nWallPnt = nWallsPntPerFrame * self.nTotalFrames
     # Allocate arrays based on actual number of points
     self.xyWalls = np.zeros((self.nWallPnt, self.dim + 1))
-    self.uvWalls = np.zeros((self.nWallPnt, self.dim))
+    self.uvWalls = np.zeros((self.nWallPnt, self.dim + 1))
 
     print('Using {} wall points'.format(self.nWallPnt))
 

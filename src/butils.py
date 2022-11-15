@@ -6,15 +6,16 @@ import matplotlib.pyplot as plt
 import subprocess
 
 
-PRINT_DEBUG = 0
+PRINT_DEBUG = 1
 IMG_DEBUG = 1
 
+
 # Reference quantities for non-dimensionalization
-V   = 1                       # [meters/sec],  Reference velocity
-L   = 0.01                    # [meters],      Reference length
-T   = L / V                   # [sec],         Reference time
-_nu = 2.938e-7                # [m^2/sec],     Kinematic viscosity at 100 Celsius
-Re  = (V * L) / _nu           # dimensionless, Reynolds number
+V   = 0.625                   # [meter/second],   Reference velocity
+L   = 0.02                    # [meter],          Reference length
+T   = L / V                   # [second],         Reference time
+_nu = 2.938e-7                # [meter^2/second], Kinematic viscosity at 100 Celsius
+Re  = (V * L) / _nu           # dimensionless,    Reynolds number
 
 
 # World space quantities

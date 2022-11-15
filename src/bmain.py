@@ -87,7 +87,7 @@ assert args.file.endswith('.h5')
 dataSet = BD.BubbleDataSet(wallPoints=args.nWallPnt, \
                            colPoints=args.nColPoint, dataPoints=args.nDataPoint)
 dataSet.restore(args.file)
-dataSet.prepare_batch_arrays(zeroInitialCollocation=False)
+dataSet.prepare_batch_arrays(zeroInitialCollocation=True)
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 1)

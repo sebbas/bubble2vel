@@ -22,7 +22,7 @@ class BubbleDataSet:
   FLAG_VISITED = 1
 
   def __init__(self, fName='', totalframes=0, startframe=0, dim=2, \
-               wallPoints=-1, colPoints=-1, dataPoints=-1):
+               wallPoints=-1, colPoints=-1, dataPoints=-1, walls=[1,1,1,1]):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
     self.dim          = dim
@@ -30,6 +30,7 @@ class BubbleDataSet:
     self.isLoaded     = False
     self.startframe   = startframe
     self.nTotalFrames = totalframes
+    self.walls        = walls
     # Lists to count number of cells per frame
     self.nBcBubble = []
     self.nFluid    = []
@@ -41,23 +42,21 @@ class BubbleDataSet:
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim]
     # Arrays to store processed data (after processing ground truth)
-    self.bc       = None # [nSamples, dim]
+    self.bc       = None # [nSamples, dim + 1]
     self.xyBc     = None # [nSamples, dim + 1]
     self.xyFluid  = None # [nSamples, dim + 1]
-    self.bcDomain = None # [nSamples, dim]
+    self.bcDomain = None # [nSamples, dim + 1]
     self.xyDomain = None # [nSamples, dim + 1]
     # Arrays to store selection of points
     self.xyCol    = None # [nColPnt,  dim + 1]
     self.xyData   = None # [nDataPnt, dim + 1]
-    self.uvData   = None # [nDataPnt, dim]
+    self.uvData   = None # [nDataPnt, dim + 1]
     self.xyWalls  = None # [nWallPnt, dim + 1]
-    self.uvWalls  = None # [nWallPnt, dim]
+    self.uvWalls  = None # [nWallPnt, dim + 1]
     # Arrays to store (shuffled) mix of data and collocation points
     self.labels   = None
     self.xyt      = None
     self.id       = None
-    self.labelsW  = None
-    self.xytW     = None
     # Resolution of collocation points (only use every other points as col point)
     self.colRes = 2
 
@@ -148,12 +147,27 @@ class BubbleDataSet:
     print('--------------------------------')
 
 
+  # Obtain mask that filters points on walls
+  def get_wall_mask(self, xy):
+    assert xy.shape[1] >= 2, "xy array must have at least 2 dimensions"
+    bWTop, bWRight, bWBottom, bWLeft = self.walls[0], self.walls[1], self.walls[2], self.walls[3]
+    xMask = np.logical_and(xy[:,0] >= bWTop, xy[:,0] < self.size[0] - bWBottom)
+    yMask = np.logical_and(xy[:,1] >= bWLeft, xy[:,1] < self.size[1] - bWRight)
+    mask = np.logical_and(xMask, yMask)
+    return mask
+
+
   def generate_predict_pts(self, begin, end, worldSize, fps, L, T, onlyBc=False):
     print('Generating prediction points')
 
     for frame in range(begin, end):
-      loopArray = self.get_xy_bc(frame) if onlyBc else self.get_xy_fluid(frame)
-      tmpLst    = [pos for pos in loopArray]
+      xyPred = self.get_xy_bc(frame) if onlyBc else self.get_xy_fluid(frame)
+
+      # Only use points within boundaries
+      mask = self.get_wall_mask(xyPred)
+      xyPredMasked = xyPred[mask]
+
+      tmpLst    = [pos for pos in xyPredMasked]
       nGridPnt  = len(tmpLst)
 
       # Arrays to store batches
@@ -176,7 +190,7 @@ class BubbleDataSet:
       pos  = UT.pos_world_to_dimensionless(pos, L)
       time = UT.time_world_to_dimensionless(time, T)
 
-      yield [pos, time, w], label
+      yield [pos, t, w], label
 
 
   def prepare_batch_arrays(self, zeroInitialCollocation=False):
@@ -198,7 +212,7 @@ class BubbleDataSet:
     # Init collocation point labels with 0.0
     if zeroInitialCollocation:
       colPntLabel = 0.0
-      uvCol = np.full((self.nColPnt, self.dim), colPntLabel)
+      uvCol = np.full((self.nColPnt, self.dim + 1), colPntLabel)
     else: # Init collocation point label with random values in range of min/max of data point label
       minU, maxU = np.min(self.bc[:,0]), np.max(self.bc[:,0])
       minV, maxV = np.min(self.bc[:,1]), np.max(self.bc[:,1])
@@ -206,13 +220,15 @@ class BubbleDataSet:
       samplesV = np.random.uniform(low=minV, high=maxV, size=self.nColPnt)
       samplesU = np.expand_dims(samplesU, axis=-1)
       samplesV = np.expand_dims(samplesV, axis=-1)
-      uvCol = np.concatenate((samplesU, samplesV), axis=-1)
+      samplesP = np.zeros(self.nColPnt)
+      uvCol = np.concatenate((samplesU, samplesV, samplesP), axis=-1)
 
-    bcSamples  = np.concatenate((self.uvData, uvCol))
-    xytSamples = np.concatenate((self.xyData, self.xyCol))
-    ones       = np.full((len(self.xyData), 1), 1) # Indicates a data point
-    zeros      = np.full((len(self.xyCol), 1), 0) # Indicates a collocation point
-    idSamples  = np.concatenate((ones, zeros))
+    bcSamples  = np.concatenate((self.uvData, uvCol, self.uvWalls))
+    xytSamples = np.concatenate((self.xyData, self.xyCol, self.xyWalls))
+    dataId     = np.full((len(self.xyData), 1), 1)
+    colId      = np.full((len(self.xyCol), 1), 0)
+    wallId     = np.full((len(self.xyWalls), 1), 2)
+    idSamples  = np.concatenate((dataId, colId, wallId))
 
     assert len(bcSamples) == len(xytSamples)
     assert len(bcSamples) == len(idSamples)
@@ -226,50 +242,31 @@ class BubbleDataSet:
     assert len(self.labels) == len(self.xyt)
     assert len(self.labels) == len(self.id)
 
-    # Shuffle domain wall arrays
-    pp = np.random.permutation(len(self.xyWalls))
-    self.xytW    = self.xyWalls[pp]
-    self.labelsW = self.uvWalls[pp]
 
-    assert len(self.labelsW) == len(self.xytW)
-
-
-  def generate_train_valid_batch(self, begin, end, beginW, endW, worldSize, fps, \
+  def generate_train_valid_batch(self, begin, end, worldSize, fps, \
                                  V, L, T, batchSize=64, shuffle=True):
     generatorType = 'training' if begin == 0 else 'validation'
     print('\nGenerating {} sample {} batches'.format(batchSize, generatorType))
 
-    # Arrays to store data + collocation point batch
-    label  = np.zeros((batchSize, self.dim), dtype=float)
+    # Arrays to store data + collocation + wall point batch
+    label  = np.zeros((batchSize, self.dim + 1), dtype=float)
     xy     = np.zeros((batchSize, self.dim), dtype=float)
     t      = np.zeros((batchSize, 1),        dtype=float)
     id     = np.zeros((batchSize, 1),        dtype=float)
-    # Arrays to store domain wall batch
-    xyW    = np.zeros((batchSize, self.dim), dtype=float)
-    tW     = np.zeros((batchSize, 1),        dtype=float)
-    labelW = np.zeros((batchSize, self.dim), dtype=float)
 
-    s, sW = begin, beginW
+    s = begin
     while True:
       if s + batchSize > end:
         s = begin
-      if sW + batchSize > endW:
-        sW = beginW
       e = s + batchSize
-      eW = sW + batchSize
 
       # Fill batch arrays
       label[:, :] = self.labels[s:e, :]
       xy[:, :]    = self.xyt[s:e, :self.dim]
       t[:, 0]     = self.xyt[s:e, self.dim]
       id[:, 0]    = self.id[s:e, 0]
-      if endW > 0:
-        labelW[:, :] = self.labelsW[sW:eW, :]
-        xyW[:, :]    = self.xytW[sW:eW, :self.dim]
-        tW[:, 0]     = self.xytW[sW:eW, self.dim]
 
       s  += batchSize
-      sW += batchSize
 
       # Shuffle batch
       if shuffle:
@@ -279,32 +276,28 @@ class BubbleDataSet:
         t      = t[p]
         id     = id[p]
         label  = label[p]
-        xyW    = xyW[p]
-        labelW = labelW[p]
 
       # Convert from domain space to world space
       vel   = UT.vel_domain_to_world(label, worldSize, fps)
       pos   = UT.pos_domain_to_world(xy, worldSize)
       time  = UT.time_domain_to_world(t, fps)
-      velW  = UT.vel_domain_to_world(labelW, worldSize, fps)
-      posW  = UT.pos_domain_to_world(xyW, worldSize)
-      timeW = UT.time_domain_to_world(tW, fps)
 
       # Convert from world space to dimensionless quantities
       vel   = UT.vel_world_to_dimensionless(vel, V)
       pos   = UT.pos_world_to_dimensionless(pos, L)
       time  = UT.time_world_to_dimensionless(time, T)
-      velW  = UT.vel_world_to_dimensionless(velW, V)
-      posW  = UT.pos_world_to_dimensionless(posW, L)
-      timeW = UT.time_world_to_dimensionless(timeW, T)
 
-      yield [pos, time, id, posW, timeW, velW], vel
+      yield [pos, time, id], vel
 
 
-  # Define solid domain borders: walls = [top, right, bottom, left]
-  def extract_wall_points(self, walls):
+  # Define domain border locations + attach bc
+  def extract_wall_points(self):
     print('Extracting domain wall points')
     rng = np.random.default_rng(2022)
+
+    if not sum(self.walls):
+      if UT.PRINT_DEBUG: print('No walls defined. Not extracting any wall points')
+      return
 
     bcFrameLst = [] # Domain boundary condition for every frame
     xyFrameLst = [] # Domain boundary condition xy for every frame
@@ -314,49 +307,62 @@ class BubbleDataSet:
     for frame in range(self.nTotalFrames):
       UT.print_progress(frame, self.nTotalFrames)
 
-      bcCondition = 0. # zero vel at boundary
       bcLst = []
       xyLst = []
 
-      if not sum(walls):
-        if UT.PRINT_DEBUG: print('Warning frame %d: All domain walls open. Returning early' % frame)
-        return
+      # Boundary width
+      bWTop    = self.walls[0]-1 if self.walls[0] else 0
+      bWRight  = self.walls[1]-1 if self.walls[1] else 0
+      bWBottom = self.walls[2]-1 if self.walls[2] else 0
+      bWLeft   = self.walls[3]-1 if self.walls[3] else 0
 
+      # Boundary condition
+      bCTop, bCRight, bCBottom, bCLeft = [0, 0, 0]
+
+      # Using origin 'upper', x going down, y going right
       # Top domain wall
-      if walls[0]:
-        x = np.full((sizeY-2,), 0, dtype=int)
-        y = np.linspace(1, sizeY-2, num=sizeY-2, dtype=int)
-        bcLst.extend(np.full((sizeY-2,self.dim), bcCondition)) #, dtype=int))
-        xyLst.extend(list(zip(x,y)))
+      if self.walls[0] > 0:
+        numCells = sizeY - bWLeft - bWRight
+        x = np.full((numCells,), bWTop, dtype=float)
+        y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)
+        t = np.full((numCells, 1), frame, dtype=float)
+        bcLst.extend(np.tile(bCTop, (numCells, 1)))
+        xyLst.extend(list(zip(x,y,t)))
 
       # Right domain wall
-      if walls[1]:
-        x = np.linspace(1, sizeX-2, num=sizeX-2, dtype=int)
-        y = np.full((sizeX-2,), sizeX-1, dtype=int)
-        bcLst.extend(np.full((sizeX-2,self.dim), bcCondition)) #, dtype=int))
-        xyLst.extend(list(zip(x,y)))
+      if self.walls[1] > 0:
+        numCells = sizeX - bWTop - bWBottom
+        x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)
+        y = np.full((numCells,), sizeX-1-bWRight, dtype=float)
+        t = np.full((numCells, 1), frame, dtype=float)
+        bcLst.extend(np.tile(bCRight, (numCells, 1)))
+        xyLst.extend(list(zip(x,y,t)))
 
       # Bottom domain wall
-      if walls[2]:
-        x = np.full((sizeY-2,), sizeY-1, dtype=int)
-        y = np.linspace(1, sizeY-2, num=sizeY-2, dtype=int)[::-1]
-        bcLst.extend(np.full((sizeY-2,self.dim), bcCondition)) #, dtype=int))
-        xyLst.extend(list(zip(x,y)))
+      if self.walls[2] > 0:
+        numCells = sizeY - bWLeft - bWRight
+        x = np.full((numCells,), sizeY-1-bWBottom, dtype=float)
+        y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)[::-1]
+        t = np.full((numCells, 1), frame, dtype=float)
+        bcLst.extend(np.tile(bCBottom, (numCells, 1)))
+        xyLst.extend(list(zip(x,y,t)))
 
       # Left domain wall
-      if walls[3]:
-        x = np.linspace(1, sizeX-2, num=sizeX-2, dtype=int)[::-1]
-        y = np.full((sizeX-2,), 0, dtype=int)
-        bcLst.extend(np.full((sizeX-2,self.dim), bcCondition)) #, dtype=int))
-        xyLst.extend(list(zip(x,y)))
+      if self.walls[3] > 0:
+        numCells = sizeX - bWTop - bWBottom
+        x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)[::-1]
+        y = np.full((numCells,), bWLeft, dtype=float)
+        t = np.full((numCells, 1), frame, dtype=float)
+        bcLst.extend(np.tile(bCLeft, (numCells, 1)))
+        xyLst.extend(list(zip(x,y,t)))
 
       bcFrameLst.append(bcLst)
       xyFrameLst.append(xyLst)
 
       if UT.IMG_DEBUG:
         debugGrid = np.zeros((self.size), dtype=int)
-        for x, y in xyLst:
-          debugGrid[x,y] = 1
+        for x, y, _ in xyLst:
+          debugGrid[int(x),int(y)] = 1
         UT.save_image(src=debugGrid, subdir='extract', name='domainPts_extract', frame=frame, origin='upper')
 
       # Keep track of number of wall cells per frame
@@ -365,7 +371,7 @@ class BubbleDataSet:
     if UT.PRINT_DEBUG:
       print('Total number of wall samples: {}'.format(np.sum(self.nWalls)))
 
-    self.bcDomain = np.zeros((np.sum(self.nWalls), self.dim))
+    self.bcDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
     self.xyDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
 
     s = 0
@@ -373,13 +379,12 @@ class BubbleDataSet:
       assert len(bcFrameLst[frame]) == len(xyFrameLst[frame]), 'Number of velocity labels must match number of xy positions'
 
       n = len(bcFrameLst[frame])
-      t = np.full((n, 1), frame, dtype=float)
       e = s + n
       if n:
-        uv = np.asarray(bcFrameLst[frame], dtype=float)
-        xy = np.asarray(xyFrameLst[frame], dtype=float)
-        self.bcDomain[s:e, :] = uv
-        self.xyDomain[s:e, :] = np.hstack((xy, t))
+        uvp = np.asarray(bcFrameLst[frame], dtype=float)
+        xyt = np.asarray(xyFrameLst[frame], dtype=float)
+        self.bcDomain[s:e, :] = uvp
+        self.xyDomain[s:e, :] = xyt
       s = e
 
 
@@ -495,7 +500,7 @@ class BubbleDataSet:
       print('Total number of fluid samples: {}'.format(np.sum(self.nFluid)))
 
     # Allocate arrays for preprocessed data ...
-    self.bc   = np.zeros((np.sum(self.nBcBubble), self.dim),     dtype=float)
+    self.bc   = np.zeros((np.sum(self.nBcBubble), self.dim + 1), dtype=float) # dim + 1 for p
     self.xyBc = np.zeros((np.sum(self.nBcBubble), self.dim + 1), dtype=float) # dim + 1 for t
     self.xyFluid = np.zeros((np.sum(self.nFluid), self.dim + 1), dtype=float)
 
@@ -511,7 +516,7 @@ class BubbleDataSet:
       if n: # only insert if there is at least 1 cell
         uv = np.asarray(bcFrameLst[frame], dtype=float)
         xy = np.asarray(xyFrameLst[frame], dtype=float)
-        self.bc[s:e, :] = uv
+        self.bc[s:e, :self.dim] = uv
         self.xyBc[s:e, :] = np.hstack((xy, t))
       s = e
 
@@ -533,6 +538,12 @@ class BubbleDataSet:
     if all:
       self.xyData = copy.deepcopy(self.xyBc)
       self.uvData = copy.deepcopy(self.bc)
+
+      # Only use points within boundaries
+      mask = self.get_wall_mask(self.xyData)
+      self.xyData = self.xyData[mask]
+      self.uvData = self.uvData[mask]
+
       self.nDataPnt = len(self.xyData)
       print('Using {} data points'.format(self.nDataPnt))
       return
@@ -543,7 +554,7 @@ class BubbleDataSet:
     self.nDataPnt = nDataPntPerFrame * self.nTotalFrames
     # Allocate arrays based on actual number of points
     self.xyData = np.zeros((self.nDataPnt, self.dim + 1))
-    self.uvData = np.zeros((self.nDataPnt, self.dim))
+    self.uvData = np.zeros((self.nDataPnt, self.dim + 1))
 
     print('Using {} data points'.format(self.nDataPnt))
 
@@ -555,14 +566,19 @@ class BubbleDataSet:
       xyDataFrame = self.get_xy_bc(frame)
       uvDataFrame = self.get_bc(frame)
 
+      # Only use points within boundaries
+      mask = self.get_wall_mask(xyDataFrame)
+      xyDataFrameMasked = xyDataFrame[mask]
+      uvDataFrameMasked = uvDataFrame[mask]
+
       # Insert random selection of data point coords into data point array
       if UT.PRINT_DEBUG:
         print('Taking {} data points out of {} available'.format(nDataPntPerFrame, xyDataFrame.shape[0]))
-      indices = np.arange(0, xyDataFrame.shape[0])
+      indices = np.arange(0, xyDataFrameMasked.shape[0])
       randIndices = rng.choice(indices, size=nDataPntPerFrame, replace=False)
       e = s + nDataPntPerFrame
-      self.xyData[s:e, :] = xyDataFrame[randIndices, :]
-      self.uvData[s:e, :] = uvDataFrame[randIndices, :]
+      self.xyData[s:e, :] = xyDataFrameMasked[randIndices, :]
+      self.uvData[s:e, :] = uvDataFrameMasked[randIndices, :]
       s = e
 
       if UT.IMG_DEBUG:
@@ -603,6 +619,10 @@ class BubbleDataSet:
       # Only use every other grid point (self.colRes == interval) as collocation point
       mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
       xyFluidFrameMasked = xyFluidFrame[mask]
+
+      # Only use points within boundaries
+      mask = self.get_wall_mask(xyFluidFrameMasked)
+      xyFluidFrameMasked = xyFluidFrameMasked[mask]
 
       # Insert random selection of fluid coords into collocation array
       if UT.PRINT_DEBUG:
@@ -682,10 +702,11 @@ class BubbleDataSet:
     nSampleWalls  = np.sum(self.nWalls)
 
     fname = os.path.join(dir, filePrefix + '_{}_r{}_t{}_w{}.h5'.format( \
-              self.size[0], self.colRes, self.nTotalFrames, UT.get_list_string(walls)))
+              self.size[0], self.colRes, self.nTotalFrames, UT.get_list_string(walls, delim='-')))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']         = self.size
     dFile.attrs['frames']       = self.nTotalFrames
+    dFile.attrs['walls']        = self.walls
     dFile.attrs['nBcBubble']    = np.asarray(self.nBcBubble)
     dFile.attrs['nFluid']       = np.asarray(self.nFluid)
     dFile.attrs['nWalls']       = np.asarray(self.nWalls)
@@ -694,13 +715,13 @@ class BubbleDataSet:
     comp_type = 'gzip'
     comp_level = 9
 
-    dFile.create_dataset('bc', (nSampleBc, self.dim), compression=comp_type,
+    dFile.create_dataset('bc', (nSampleBc, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.bc)
     dFile.create_dataset('xyBc', (nSampleBc, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyBc)
     dFile.create_dataset('xyFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyFluid)
-    dFile.create_dataset('bcDomain', (nSampleWalls, self.dim), compression=comp_type,
+    dFile.create_dataset('bcDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.bcDomain)
     dFile.create_dataset('xyDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyDomain)
@@ -717,6 +738,7 @@ class BubbleDataSet:
 
     self.size         = dFile.attrs['size']
     self.nTotalFrames = dFile.attrs['frames']
+    self.walls        = dFile.attrs['walls']
     self.nBcBubble    = dFile.attrs['nBcBubble']
     self.nFluid       = dFile.attrs['nFluid']
     self.nWalls       = dFile.attrs['nWalls']

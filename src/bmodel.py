@@ -83,7 +83,7 @@ class BubblePINN(keras.Model):
         self.trainMetrics[prefix+'std'].update_state(gStd)
 
 
-  def compute_losses(self, xy, t, w, uv, xyWalls, tWalls, uvWalls):
+  def compute_losses(self, xy, t, w, uv):
     # Track computation for 2nd derivatives for u, v
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
       tape2.watch(xy)
@@ -92,8 +92,8 @@ class BubblePINN(keras.Model):
         tape1.watch(t)
         uvpPred = self([xy, t])
         uPred   = uvpPred[:,0]
-        vPred   = uvpPred[:,0]
-        pPred   = uvpPred[:,1]
+        vPred   = uvpPred[:,1]
+        pPred   = uvpPred[:,2]
       # 1st order derivatives
       u_grad = tape1.gradient(uPred, xy)
       v_grad = tape1.gradient(vPred, xy)
@@ -113,27 +113,28 @@ class BubblePINN(keras.Model):
 
     # Compute data loss
     w = tf.squeeze(w)
-    nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMse  = tf.reduce_sum(w * tf.square(uPred - uv[:,0])) / nDataPoint
-    vMse  = tf.reduce_sum(w * tf.square(vPred - uv[:,1])) / nDataPoint
+    dataMask = tf.cast(tf.equal(w, 1), tf.float32)
+    nDataPoint = tf.reduce_sum(dataMask) + 1.0e-10
+    uMse  = tf.reduce_sum(tf.square(uv[:,0] - uPred) * dataMask) / nDataPoint
+    vMse  = tf.reduce_sum(tf.square(uv[:,1] - vPred) * dataMask) / nDataPoint
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
-    ww      = 1.0 - w
-    nPdePoint = tf.reduce_sum(ww) + 1.0e-10
+    colMask = tf.cast(tf.equal(w, 0), tf.float32)
+    nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
+    pdeTrue = 0.0
     pde0    = u_x + v_y
     pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/self.Re)*(u_xx + u_yy)
     pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/self.Re)*(v_xx + v_yy)
-    pdeMse0 = tf.reduce_sum(tf.square(pde0) * ww) / nPdePoint
-    pdeMse1 = tf.reduce_sum(tf.square(pde1) * ww) / nPdePoint
-    pdeMse2 = tf.reduce_sum(tf.square(pde2) * ww) / nPdePoint
+    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
+    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
+    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
 
     # Compute domain wall loss
-    uvpWallsPred = self([xyWalls, tWalls])
-    nWallsPoint = nDataPoint + nPdePoint # ie the batch size
-    uMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,0])) / nWallsPoint
-    vMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,1])) / nWallsPoint
-    pMseWalls = tf.reduce_sum(tf.square(uvpWallsPred[:,2])) / nWallsPoint
-
+    wallMask = tf.cast(tf.equal(w, 2), tf.float32)
+    nWallsPoint = tf.reduce_sum(wallMask) + 1.0e-10
+    uMseWalls = tf.reduce_sum(tf.square(uv[:,0] - uPred) * wallMask) / nWallsPoint
+    vMseWalls = tf.reduce_sum(tf.square(uv[:,1] - vPred) * wallMask) / nWallsPoint
+    pMseWalls = tf.reduce_sum(tf.square(uv[:,2] - pPred) * wallMask) / nWallsPoint
     return uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
 
 
@@ -141,16 +142,13 @@ class BubblePINN(keras.Model):
     xy       = data[0][0]
     t        = data[0][1]
     w        = data[0][2]
-    xyWalls  = data[0][3]
-    tWalls   = data[0][4]
-    bcDomain = data[0][5]
     uv       = data[1]
 
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
       uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-        self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
+        self.compute_losses(xy, t, w, uv)
       # replica's loss, divided by global batch size
       loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
               + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
@@ -209,14 +207,11 @@ class BubblePINN(keras.Model):
     xy       = data[0][0]
     t        = data[0][1]
     w        = data[0][2]
-    xyWalls  = data[0][3]
-    tWalls   = data[0][4]
-    bcDomain = data[0][5]
     uv       = data[1]
 
     # Compute the data and pde losses
     uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-      self.compute_losses(xy, t, w, uv, xyWalls, tWalls, bcDomain)
+      self.compute_losses(xy, t, w, uv)
     # replica's loss, divided by global batch size
     loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
@@ -277,6 +272,6 @@ class BubblePINN(keras.Model):
           self.alpha[0], self.alpha[1]))
     print('Coefficients for pde residual {} {} {}'.format(\
           self.beta[0], self.beta[1], self.beta[2]))
-    print('Coefficients for domain wall loss {} {}'.format(\
-          self.gamma[0], self.gamma[1]))
+    print('Coefficients for domain wall loss {} {} {}'.format(\
+          self.gamma[0], self.gamma[1], self.gamma[2]))
     print('--------------------------------')

@@ -99,21 +99,13 @@ nTrain   = int(nSamples * 0.9)
 nTrain   = args.batchSize * round(nTrain / args.batchSize)
 nValid   = nSamples - nTrain
 
-# Split for domain wall points
-nSamplesW = dataSet.get_num_wall_pts()
-nTrainW   = int(nSamplesW * 0.9)
-# Ensure training samples fit evenly
-nTrainW   = args.batchSize * round(nTrainW / args.batchSize)
-nValidW   = nSamplesW - nTrainW
-
 print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
-print('{} domain wall points in training, {} in validation'.format(nTrainW, nValidW))
 
 # Generators
-trainGen = dataSet.generate_train_valid_batch(0, nTrain, 0, nTrainW, \
+trainGen = dataSet.generate_train_valid_batch(0, nTrain, \
                                               UT.worldSize, UT.fps, UT.V, UT.L, UT.T, \
                                               batchSize=args.batchSize)
-validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, nTrainW, nSamplesW, \
+validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, \
                                               UT.worldSize, UT.fps, UT.V, UT.L, UT.T, \
                                               batchSize=args.batchSize)
 

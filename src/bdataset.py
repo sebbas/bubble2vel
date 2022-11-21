@@ -425,10 +425,9 @@ class BubbleDataSet:
         visited[i, j] = self.FLAG_VISITED
 
         stack = [(i, j)] # Init stack with current border cell coords
-        while(len(stack) > 0):
+        while (len(stack) > 0):
           c = stack.pop()
-          i = c[0]
-          j = c[1]
+          i, j = c[0], c[1]
           visited[i, j] = self.FLAG_VISITED # Mark current cell as visited
           neighbors = [(i+1, j  ), (i-1, j  ), (i  , j+1), (i  , j-1),
                        (i+1, j+1), (i-1, j+1), (i+1, j-1), (i-1, j-1)]
@@ -438,7 +437,7 @@ class BubbleDataSet:
               continue
             ni, nj = n[0], n[1]
             # Also skip if neighbor cell has already been visited
-            if (visited[ni, nj] == 1):
+            if (visited[ni, nj] == self.FLAG_VISITED):
               continue
             # Now mark neighbor cell as visited
             visited[ni, nj] = self.FLAG_VISITED

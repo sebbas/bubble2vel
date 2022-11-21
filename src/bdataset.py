@@ -95,40 +95,11 @@ class BubbleDataSet:
       self.nTotalFrames = frame
       self.isLoaded = True
 
-      # Normalization. Remember: input is optical flow, i.e. pixel movement between frame i and i+1
-      if normalize:
-        normWithMaxVel = True
-        # Normalize data with the overall maximum velocity
-        if normWithMaxVel:
-          maxVel = np.zeros(self.dim)
-          maxVel[0] = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
-          maxVel[1] = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
-          if UT.PRINT_DEBUG:
-            print('Max vel [{}, {}]'.format(maxVel[0], maxVel[1]))
-          norm = maxVel
-        # Normalize with image width and height
-        else:
-          norm = self.size
-
-        if UT.PRINT_DEBUG:
-          u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
-          v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
-          print('Before normalization max vel [{}, {}]'.format(u, v))
-
-        # Apply normalization factor
-        self.vel[:,:,:,0] /= norm[0]
-        self.vel[:,:,:,1] /= norm[1]
-
-        if UT.PRINT_DEBUG:
-          u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
-          v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
-          print('After normalization max vel [{}, {}]'.format(u, v))
-      else:
-        if UT.PRINT_DEBUG:
-          u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
-          v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
-          print('No normalization, max vel [{}, {}]'.format(u, v))
-          print('u [{}, {}], v [{}, {}]'.format(np.min(self.vel[:,:,:,0]), np.max(self.vel[:,:,:,0]), np.min(self.vel[:,:,:,1]), np.max(self.vel[:,:,:,1])))
+      if UT.PRINT_DEBUG:
+        u = abs(max(self.vel[:,:,:,0].min(), self.vel[:,:,:,0].max(), key = abs))
+        v = abs(max(self.vel[:,:,:,1].min(), self.vel[:,:,:,1].max(), key = abs))
+        print('No normalization, max vel [{}, {}]'.format(u, v))
+        print('u [{}, {}], v [{}, {}]'.format(np.min(self.vel[:,:,:,0]), np.max(self.vel[:,:,:,0]), np.min(self.vel[:,:,:,1]), np.max(self.vel[:,:,:,1])))
     else:
       print('No data read. Returning early. Does the dataset exist?')
       self.isLoaded = False

@@ -10,16 +10,18 @@ parser.add_argument('-f', '--file', default='../data/PB_30W_RGB/512/30W%06d.flo'
                     help='the file(s) containing flow velocity training data')
 parser.add_argument('-tf', '--totalFrames', type=int, default=400,
                     help='number of frames to load from dataset')
-
 parser.add_argument('-w', '--walls', type=int, nargs=4, default=[1,1,1,1],
                     help='domain walls, [top, right, bottom, left]')
+parser.add_argument('-i', '--interface', type=int, default=1,
+                    help='thickness of bubble liquid interface in pixels')
 
 args = parser.parse_args()
 
 assert args.file.endswith('.flo')
 
 # Create dataset object,
-dataSet = BD.BubbleDataSet(fName=args.file, totalframes=args.totalFrames, walls=args.walls)
+dataSet = BD.BubbleDataSet(fName=args.file, totalframes=args.totalFrames, \
+                           walls=args.walls, interface=args.interface)
 
 # Extract points from images and save in arrays from dataset
 if not dataSet.load_data(normalize=False):

@@ -22,7 +22,8 @@ class BubbleDataSet:
   FLAG_VISITED = 1
 
   def __init__(self, fName='', totalframes=0, startframe=0, dim=2, \
-               wallPoints=-1, colPoints=-1, dataPoints=-1, walls=[1,1,1,1]):
+               wallPoints=-1, colPoints=-1, dataPoints=-1, walls=[1,1,1,1], \
+               interface=1):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
     self.dim          = dim
@@ -31,6 +32,7 @@ class BubbleDataSet:
     self.startframe   = startframe
     self.nTotalFrames = totalframes
     self.walls        = walls
+    self.interface    = interface
     # Lists to count number of cells per frame
     self.nBcBubble = []
     self.nFluid    = []
@@ -465,6 +467,27 @@ class BubbleDataSet:
             if flags[i,j] == self.FLAG_BUBBLE and fluidNeighborCnt >= 5:
               flags[i,j] = self.FLAG_FLUID
               intersection[i,j] = 0
+
+      # Optional: Thicken interface by adding pixels along the inside of bubbles
+      if self.interface > 1: # Add more pixels, intersection is currently 1 pixel thick
+        nz = np.nonzero(intersection)
+        indices = list(zip(nz[0], nz[1]))
+        for _ in range(self.interface-1): # Thicken interface by n-1 pixels
+          nextIndices = []
+          for n in (indices):
+            i, j = n[0], n[1]
+            neighbors = [(i+1, j), (i-1, j), (i, j+1), (i, j-1)]
+            for n in neighbors:
+              ni, nj = n[0], n[1]
+              if ni < 0 or ni >= sizeX or nj < 0 or nj >= sizeY:
+                continue
+              if flags[ni, nj] == self.FLAG_FLUID:
+                continue
+              if intersection[ni, nj] == 1:
+                continue
+              intersection[ni, nj] = 1
+              nextIndices.append((ni, nj))
+          indices = nextIndices
 
       if UT.IMG_DEBUG:
         UT.save_image(src=flags, subdir='extract', name='flags_extract', frame=frame)

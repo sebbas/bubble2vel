@@ -718,8 +718,9 @@ class BubbleDataSet:
     nSampleFluid  = np.sum(self.nFluid)
     nSampleWalls  = np.sum(self.nWalls)
 
-    fname = os.path.join(dir, filePrefix + '_{}_r{}_t{}_w{}.h5'.format( \
-              self.size[0], self.colRes, self.nTotalFrames, UT.get_list_string(walls, delim='-')))
+    fname = os.path.join(dir, filePrefix + '_{}_r{}_t{}_i{}_w{}.h5'.format( \
+              self.size[0], self.colRes, self.nTotalFrames, self.interface, \
+              UT.get_list_string(walls, delim='-')))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']         = self.size
     dFile.attrs['frames']       = self.nTotalFrames

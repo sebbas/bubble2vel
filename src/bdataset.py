@@ -70,16 +70,16 @@ class BubbleDataSet:
     frame = self.startFrame
     fNameExact = self.fName % frame
     # Loop over request number of frames
-    while os.path.exists(fNameExact) and frame < self.nTotalFrames:
+    while os.path.exists(fNameExact) and frame <= self.endFrame:
       f = open(fNameExact, 'rb')
       magic = np.fromfile(f, np.float32, count = 1)
       sizeFromFile = np.fromfile(f, np.int32, count = self.dim)
       dataFromFile = np.fromfile(f, np.float32, count = self.dim * sizeFromFile[0] * sizeFromFile[1])
       dataFromFile = np.resize(dataFromFile, (sizeFromFile[1], sizeFromFile[0], self.dim))
       # After the 1st frame we know the size, so make sure the following files have same size
-      if frame > 0:
-        assert sizeFromFile[0] == self.size[0], 'Width in dataset does not match width from files'
-        assert sizeFromFile[1] == self.size[1], 'Height in dataset does not match width from files'
+      if frame > self.startFrame:
+        assert sizeFromFile[0] == self.size[0], 'Width in dataset does not match width from files, {} vs {}'.format(self.size[0], sizeFromFile[0])
+        assert sizeFromFile[1] == self.size[1], 'Height in dataset does not match width from files, {} vs {}'.format(self.size[1], sizeFromFile[1])
       # Copy read data into data structures
       self.size = sizeFromFile
       assert (self.size[0] + self.size[1]) * 2 * self.nTotalFrames >= self.nWallPnt, "Maximum number of bc domain points exceeded"
@@ -91,7 +91,7 @@ class BubbleDataSet:
       fNameExact = self.fName % frame
 
     if len(velLst):
-      print('Read {} frames with size [{}, {}] (width, height)'.format(frame, self.size[0], self.size[1]))
+      print('Read frames {} to {} ({} in total) with size [{}, {}] (width, height)'.format(self.startFrame, self.endFrame, self.nTotalFrames, self.size[0], self.size[1]))
       self.vel = np.asarray(velLst)
       self.nTotalFrames = frame
       self.isLoaded = True
@@ -134,8 +134,8 @@ class BubbleDataSet:
   def generate_predict_pts(self, begin, end, worldSize, fps, L, T, onlyBc=False):
     print('Generating prediction points')
 
-    for frame in range(begin, end):
-      xyPred = self.get_xy_bc(frame) if onlyBc else self.get_xy_fluid(frame)
+    for f in range(begin, end):
+      xyPred = self.get_xy_bc(f) if onlyBc else self.get_xy_fluid(f)
 
       # Only use points within boundaries
       mask = self.get_wall_mask(xyPred)
@@ -278,8 +278,9 @@ class BubbleDataSet:
 
     sizeX, sizeY = self.size
 
-    for frame in range(self.nTotalFrames):
-      UT.print_progress(frame, self.nTotalFrames)
+    for f in range(self.nTotalFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, self.nTotalFrames)
 
       bcLst = []
       xyLst = []
@@ -299,7 +300,7 @@ class BubbleDataSet:
         numCells = sizeY - bWLeft - bWRight
         x = np.full((numCells,), bWTop, dtype=float)
         y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells, 1), f, dtype=float)
         bcLst.extend(np.tile(bCTop, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -308,7 +309,7 @@ class BubbleDataSet:
         numCells = sizeX - bWTop - bWBottom
         x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)
         y = np.full((numCells,), sizeX-1-bWRight, dtype=float)
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells, 1), f, dtype=float)
         bcLst.extend(np.tile(bCRight, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -317,7 +318,7 @@ class BubbleDataSet:
         numCells = sizeY - bWLeft - bWRight
         x = np.full((numCells,), sizeY-1-bWBottom, dtype=float)
         y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)[::-1]
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells, 1), f, dtype=float)
         bcLst.extend(np.tile(bCBottom, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -326,7 +327,7 @@ class BubbleDataSet:
         numCells = sizeX - bWTop - bWBottom
         x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)[::-1]
         y = np.full((numCells,), bWLeft, dtype=float)
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells, 1), f, dtype=float)
         bcLst.extend(np.tile(bCLeft, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -349,14 +350,14 @@ class BubbleDataSet:
     self.xyDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
 
     s = 0
-    for frame in range(self.nTotalFrames):
-      assert len(bcFrameLst[frame]) == len(xyFrameLst[frame]), 'Number of velocity labels must match number of xy positions'
+    for f in range(self.nTotalFrames):
+      assert len(bcFrameLst[f]) == len(xyFrameLst[f]), 'Number of velocity labels must match number of xy positions'
 
-      n = len(bcFrameLst[frame])
+      n = len(bcFrameLst[f])
       e = s + n
       if n:
-        uvp = np.asarray(bcFrameLst[frame], dtype=float)
-        xyt = np.asarray(xyFrameLst[frame], dtype=float)
+        uvp = np.asarray(bcFrameLst[f], dtype=float)
+        xyt = np.asarray(xyFrameLst[f], dtype=float)
         self.bcDomain[s:e, :] = uvp
         self.xyDomain[s:e, :] = xyt
       s = e
@@ -370,8 +371,9 @@ class BubbleDataSet:
     xyFluidFrameLst = []
     sizeX, sizeY = self.size
 
-    for frame in range(self.nTotalFrames):
-      UT.print_progress(frame, self.nTotalFrames)
+    for f in range(self.nTotalFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, self.nTotalFrames)
 
       bcLst = []
       xyLst = []
@@ -384,7 +386,7 @@ class BubbleDataSet:
       # Visited == grid with all cells that have been visited during flood-fill
       visited = np.zeros((sizeX, sizeY), dtype=int)
       # Velocity magnitude per cell
-      mag = np.sqrt(self.vel[frame,:,:,0] ** 2 + self.vel[frame,:,:,1] ** 2)
+      mag = np.sqrt(self.vel[f,:,:,0] ** 2 + self.vel[f,:,:,1] ** 2)
 
       cornerCells = [(0,0), (0,sizeY-1), (sizeX-1,sizeY-1), (sizeX-1,0)]
       # Initialize flood-fill search with corner cells of grid
@@ -466,7 +468,7 @@ class BubbleDataSet:
         UT.save_image(src=mag, subdir='extract', name='magnitude_extract', frame=frame)
 
       # Add bubble border velocities to bc list
-      curVels = self.vel[frame, :, :, :]
+      curVels = self.vel[f,:,:,:]
       bubbleBorderVels = curVels[np.array(intersection, dtype=bool)]
       bcLst.extend(bubbleBorderVels)
       bcFrameLst.append(bcLst)
@@ -500,26 +502,26 @@ class BubbleDataSet:
 
     # ... and insert data from lists
     s, sFl = 0, 0
-    for frame in range(self.nTotalFrames):
-      assert len(bcFrameLst[frame]) == len(xyFrameLst[frame]), 'Number of velocity labels must match number of xy positions'
+    for f in range(self.nTotalFrames):
+      assert len(bcFrameLst[f]) == len(xyFrameLst[f]), 'Number of velocity labels must match number of xy positions'
 
       # Insertion of bc and xyBc lists
-      n = len(bcFrameLst[frame])
-      t = np.full((n, 1), frame, dtype=float)
+      n = len(bcFrameLst[f])
+      t = np.full((n, 1), f, dtype=float)
       e = s + n
       if n: # only insert if there is at least 1 cell
-        uv = np.asarray(bcFrameLst[frame], dtype=float)
-        xy = np.asarray(xyFrameLst[frame], dtype=float)
+        uv = np.asarray(bcFrameLst[f], dtype=float)
+        xy = np.asarray(xyFrameLst[f], dtype=float)
         self.bc[s:e, :self.dim] = uv
         self.xyBc[s:e, :] = np.hstack((xy, t))
       s = e
 
       # Insertion of xyFluid list
-      nFl = len(xyFluidFrameLst[frame])
-      tFl = np.full((nFl, 1), frame, dtype=float)
+      nFl = len(xyFluidFrameLst[f])
+      tFl = np.full((nFl, 1), f, dtype=float)
       eFl = sFl + nFl
       if nFl: # only insert if there is at least 1 cell
-        xy = np.asarray(xyFluidFrameLst[frame], dtype=float)
+        xy = np.asarray(xyFluidFrameLst[f], dtype=float)
         self.xyFluid[sFl:eFl, :] = np.hstack((xy, tFl))
       sFl = eFl
 
@@ -560,12 +562,13 @@ class BubbleDataSet:
     print('Using {} data points'.format(self.nDataPnt))
 
     s = 0
-    for frame in range(self.nTotalFrames):
-      UT.print_progress(frame, self.nTotalFrames)
+    for f in range(self.nTotalFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, self.nTotalFrames)
 
       # Get all data point coords and vels for the current frame
-      xyDataFrame = self.get_xy_bc(frame)
-      uvDataFrame = self.get_bc(frame)
+      xyDataFrame = self.get_xy_bc(f)
+      uvDataFrame = self.get_bc(f)
 
       # Only use points within boundaries
       mask = self.get_wall_mask(xyDataFrame)
@@ -607,11 +610,12 @@ class BubbleDataSet:
       return
 
     s = 0
-    for frame in range(self.nTotalFrames):
-      UT.print_progress(frame, self.nTotalFrames)
+    for f in range(self.nTotalFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, self.nTotalFrames)
 
       # Get all fluid coords for the current frame
-      xyFluidFrame = self.get_xy_fluid(frame)
+      xyFluidFrame = self.get_xy_fluid(f)
 
       # Only use every other grid point (self.colRes == interval) as collocation point
       mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
@@ -661,12 +665,13 @@ class BubbleDataSet:
       return
 
     s = 0
-    for frame in range(self.nTotalFrames):
-      UT.print_progress(frame, self.nTotalFrames)
+    for f in range(self.nTotalFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, self.nTotalFrames)
 
       # Get all data point coords and vels for the current frame
-      xyWallsFrame = self.get_xy_walls(frame)
-      uvWallsFrame = self.get_bc_walls(frame)
+      xyWallsFrame = self.get_xy_walls(f)
+      uvWallsFrame = self.get_bc_walls(f)
 
       # Insert random selection of data point coords into data point array
       if UT.PRINT_DEBUG:
@@ -780,54 +785,54 @@ class BubbleDataSet:
     return self.dim
 
 
-  def get_xy_bc(self, frame):
-    s = sum(self.nBcBubble[:frame])
-    e = s + self.nBcBubble[frame]
+  def get_xy_bc(self, f):
+    s = sum(self.nBcBubble[:f])
+    e = s + self.nBcBubble[f]
     return self.xyBc[s:e, ...]
 
 
-  def get_xy_fluid(self, frame):
-    s = sum(self.nFluid[:frame])
-    e = s + self.nFluid[frame]
+  def get_xy_fluid(self, f):
+    s = sum(self.nFluid[:f])
+    e = s + self.nFluid[f]
     return self.xyFluid[s:e, ...]
 
 
-  def get_bc(self, frame):
-    s = sum(self.nBcBubble[:frame])
-    e = s + self.nBcBubble[frame]
+  def get_bc(self, f):
+    s = sum(self.nBcBubble[:f])
+    e = s + self.nBcBubble[f]
     return self.bc[s:e, ...]
 
 
-  def get_xy_walls(self, frame):
-    s = sum(self.nWalls[:frame])
-    e = s + self.nWalls[frame]
+  def get_xy_walls(self, f):
+    s = sum(self.nWalls[:f])
+    e = s + self.nWalls[f]
     return self.xyDomain[s:e, ...]
 
 
-  def get_bc_walls(self, frame):
-    s = sum(self.nWalls[:frame])
-    e = s + self.nWalls[frame]
+  def get_bc_walls(self, f):
+    s = sum(self.nWalls[:f])
+    e = s + self.nWalls[f]
     return self.bcDomain[s:e, ...]
 
 
   '''
-  def get_xy_data(self, frame):
+  def get_xy_data(self, f):
     ptsPerFrame = (self.nDataPnt // self.nTotalFrames)
-    s = ptsPerFrame * frame
+    s = ptsPerFrame * f
     e = s + ptsPerFrame
     return self.xyData[s:e, ...]
 
 
-  def get_xy_col(self, frame):
+  def get_xy_col(self, f):
     ptsPerFrame = (self.nColPnt // self.nTotalFrames)
-    s = ptsPerFrame * frame
+    s = ptsPerFrame * f
     e = s + ptsPerFrame
     return self.xyCol[s:e, ...]
 
 
-  def get_xy_bcdomain(self, frame):
+  def get_xy_bcdomain(self, f):
     ptsPerFrame = (self.nWallPnt // self.nTotalFrames)
-    s = ptsPerFrame * frame
+    s = ptsPerFrame * f
     e = s + ptsPerFrame
     return self.xyDomain[s:e, ...]
   '''

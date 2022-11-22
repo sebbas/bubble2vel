@@ -64,7 +64,7 @@ class BubbleDataSet:
     self.colRes = 2
 
 
-  def load_data(self, normalize=True, shuffle=True):
+  def load_data(self, shuffle=True):
     velLst = [] # List of vel arrays, one array per frame, later converted to np array
 
     frame = self.startFrame

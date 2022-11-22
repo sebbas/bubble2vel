@@ -27,7 +27,7 @@ dataSet = BD.BubbleDataSet(fName=args.file, startFrame=args.startFrame, \
                            interface=args.interface)
 
 # Extract points from images and save in arrays from dataset
-if not dataSet.load_data(normalize=False):
+if not dataSet.load_data():
   sys.exit()
 dataSet.extract_wall_points()
 dataSet.extract_fluid_points(velEps=1.0)

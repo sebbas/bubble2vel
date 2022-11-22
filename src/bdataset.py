@@ -21,7 +21,7 @@ class BubbleDataSet:
   FLAG_BUBBLE = 1
   FLAG_VISITED = 1
 
-  def __init__(self, fName='', totalframes=0, startframe=0, dim=2, \
+  def __init__(self, fName='', startFrame=0, endFrame=399, dim=2, \
                wallPoints=-1, colPoints=-1, dataPoints=-1, walls=[1,1,1,1], \
                interface=1):
     assert dim == 2, "Only supporting 2D datasets"
@@ -29,8 +29,9 @@ class BubbleDataSet:
     self.dim          = dim
     self.size         = np.zeros(self.dim, dtype=int)
     self.isLoaded     = False
-    self.startframe   = startframe
-    self.nTotalFrames = totalframes
+    self.startFrame   = startFrame
+    self.endFrame     = endFrame
+    self.nTotalFrames = endFrame - startFrame + 1 # Include start and end frame
     self.walls        = walls
     self.interface    = interface
     # Lists to count number of cells per frame
@@ -66,7 +67,7 @@ class BubbleDataSet:
   def load_data(self, normalize=True, shuffle=True):
     velLst = [] # List of vel arrays, one array per frame, later converted to np array
 
-    frame = self.startframe
+    frame = self.startFrame
     fNameExact = self.fName % frame
     # Loop over request number of frames
     while os.path.exists(fNameExact) and frame < self.nTotalFrames:
@@ -689,12 +690,13 @@ class BubbleDataSet:
     nSampleFluid  = np.sum(self.nFluid)
     nSampleWalls  = np.sum(self.nWalls)
 
-    fname = os.path.join(dir, filePrefix + '_{}_r{}_t{}_i{}_w{}.h5'.format( \
-              self.size[0], self.colRes, self.nTotalFrames, self.interface, \
-              UT.get_list_string(walls, delim='-')))
+    fname = os.path.join(dir, filePrefix + '_{}_r{}_t{}-{}_i{}_w{}.h5'.format( \
+              self.size[0], self.colRes, self.startFrame, self.endFrame, \
+              self.interface, UT.get_list_string(walls, delim='-')))
     dFile = h5.File(fname, 'w')
     dFile.attrs['size']         = self.size
-    dFile.attrs['frames']       = self.nTotalFrames
+    dFile.attrs['startFrame']   = self.startFrame
+    dFile.attrs['endFrame']     = self.endFrame
     dFile.attrs['walls']        = self.walls
     dFile.attrs['nBcBubble']    = np.asarray(self.nBcBubble)
     dFile.attrs['nFluid']       = np.asarray(self.nFluid)
@@ -726,7 +728,8 @@ class BubbleDataSet:
     dFile = h5.File(fname, 'r')
 
     self.size         = dFile.attrs['size']
-    self.nTotalFrames = dFile.attrs['frames']
+    self.startFrame   = dFile.attrs['startFrame']
+    self.endFrame     = dFile.attrs['endFrame']
     self.walls        = dFile.attrs['walls']
     self.nBcBubble    = dFile.attrs['nBcBubble']
     self.nFluid       = dFile.attrs['nFluid']
@@ -739,6 +742,7 @@ class BubbleDataSet:
     self.xyDomain = np.array(dFile.get('xyDomain'))
 
     self.isLoaded = True
+    self.nTotalFrames = self.endFrame - self.startFrame + 1
     dFile.close()
     print('Restored dataset from file {}'.format(fname))
     print('Dataset: size [{},{}], frames {}'.format(self.size[0], self.size[1], self.nTotalFrames))

@@ -93,7 +93,6 @@ class BubbleDataSet:
     if len(velLst):
       print('Read frames {} to {} ({} in total) with size [{}, {}] (width, height)'.format(self.startFrame, self.endFrame, self.nTotalFrames, self.size[0], self.size[1]))
       self.vel = np.asarray(velLst)
-      self.nTotalFrames = frame
       self.isLoaded = True
 
       if UT.PRINT_DEBUG:

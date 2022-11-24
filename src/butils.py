@@ -9,6 +9,7 @@ import subprocess
 PRINT_DEBUG = 1
 IMG_DEBUG = 1
 
+MODEL_NAME = 'bubble2vel'
 
 # Reference quantities for non-dimensionalization
 V   = 0.625                   # [meter/second],   Reference velocity

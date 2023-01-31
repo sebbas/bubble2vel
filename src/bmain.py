@@ -38,7 +38,7 @@ parser.add_argument('-w', '--walls', type=int, nargs=4, default=[0,0,1,0],
 # Regularizer coefficients
 parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
                     help='l2 regularization')
-parser.add_argument('-alpha', '--alpha', type=float, nargs=2, default=[1.0, 1.0],
+parser.add_argument('-alpha', '--alpha', type=float, nargs=3, default=[1.0, 1.0, 0.0],
                     help='coefficients for data loss')
 parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-2, 1e-2, 1e-2],
                     help='coefficients for pde residual')
@@ -53,7 +53,7 @@ parser.add_argument('-n', '--name', default=None, \
 parser.add_argument('-ie', '--initTrain', type=int, default=0,
                     help='initial train epochs')
 parser.add_argument('-e', '--nEpoch', default=10000, type=int, help='epochs')
-parser.add_argument('-bs', '--batchSize', type=int, default=128,
+parser.add_argument('-bs', '--batchSize', type=int, default=64,
                     help='batch size in training')
 parser.add_argument('-restart', '--restart', default=False, action='store_true',
                     help='restart from checkpoint')
@@ -79,6 +79,9 @@ parser.add_argument('-d', '--nDataPoint', type=int, default=-1,
 parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
                     help='save gradient statistics')
 
+parser.add_argument('-src', '--source', type=int, default=0,
+                    help='type of training data source, either 1: experiment or 2: simulation')
+
 args = parser.parse_args()
 
 archStr = UT.get_arch_string(args.architecture)
@@ -102,12 +105,18 @@ nValid   = nSamples - nTrain
 
 print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
 
+assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
+if args.source == UT.SRC_FLOWNET:
+  worldSize, fps, V, L, T = UT.worldSize, UT.fps, UT.V, UT.L, UT.T
+if args.source == UT.SRC_FLASHX:
+  worldSize, fps, V, L, T = UT.worldSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
+
 # Generators
 trainGen = dataSet.generate_train_valid_batch(0, nTrain, \
-                                              UT.worldSize, UT.fps, UT.V, UT.L, UT.T, \
+                                              worldSize, fps, V, L, T, \
                                               batchSize=args.batchSize)
 validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, \
-                                              UT.worldSize, UT.fps, UT.V, UT.L, UT.T, \
+                                              worldSize, fps, V, L, T, \
                                               batchSize=args.batchSize)
 
 # Create model
@@ -123,7 +132,8 @@ modelName = nameStr + archStr + paramsStr
 
 #with BM.strategy.scope():
 bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg,
-                          alpha=args.alpha, beta=args.beta, gamma=args.gamma, Re=UT.Re)
+                          alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
+                          Re=UT.get_reynolds_number(args.source))
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 
 bubbleNet.preview()
@@ -156,8 +166,8 @@ bubbleNet.fit(
 bubbleNet.summary()
 
 # Loss plot
-losses = pd.DataFrame(bubbleNet.history.history)
-fig = losses.plot().get_figure()
-UT.save_figure_dataframe(losses, fig, 'stats', 'losses')
+#losses = pd.DataFrame(bubbleNet.history.history)
+#fig = losses.plot().get_figure()
+#UT.save_figure_dataframe(losses, fig, 'stats', 'losses')
 
 

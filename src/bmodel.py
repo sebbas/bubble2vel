@@ -17,7 +17,7 @@ strategy = tf.distribute.MirroredStrategy()
 
 class BubblePINN(keras.Model):
   def __init__(self, width=[256, 256, 256, 128, 128, 128, 64, 32, 3],\
-               alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 1e-4],\
+               alpha=[1.0, 1.0, 0.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0],\
                reg=None, saveGradStat=False, Re=3.5e4, **kwargs):
     super(BubblePINN, self).__init__(**kwargs)
     print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \
@@ -41,7 +41,7 @@ class BubblePINN(keras.Model):
     self.trainMetrics = {}
     self.validMetrics = {}
     # add metrics
-    names = ['loss', 'uMse', 'vMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'uMseWalls', 'vMseWalls', 'pMseWalls']
+    names = ['loss', 'uMse', 'vMse', 'pMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'pMae', 'uMseWalls', 'vMseWalls', 'pMseWalls']
     for key in names:
       self.trainMetrics[key] = keras.metrics.Mean(name='train_'+key)
       self.validMetrics[key] = keras.metrics.Mean(name='valid_'+key)
@@ -49,7 +49,7 @@ class BubblePINN(keras.Model):
     ## i even for weights, odd for bias
     if self.saveGradStat:
       for i in range(len(width)):
-        for prefix in ['u_', 'v_', 'pde0_', 'pde1_', 'pde2_', 'uWalls_', 'vWalls_', 'pWalls_']:
+        for prefix in ['u_', 'v_', 'p_', 'pde0_', 'pde1_', 'pde2_', 'uWalls_', 'vWalls_', 'pWalls_']:
           for suffix in ['w_avg', 'w_std', 'b_avg', 'b_std']:
             key = prefix + repr(i) + suffix
             self.trainMetrics[key] = keras.metrics.Mean(name='train '+key)
@@ -117,6 +117,7 @@ class BubblePINN(keras.Model):
     nDataPoint = tf.reduce_sum(dataMask) + 1.0e-10
     uMse  = tf.reduce_sum(tf.square(uv[:,0] - uPred) * dataMask) / nDataPoint
     vMse  = tf.reduce_sum(tf.square(uv[:,1] - vPred) * dataMask) / nDataPoint
+    pMse  = tf.reduce_sum(tf.square(uv[:,2] - pPred) * dataMask) / nDataPoint
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
     colMask = tf.cast(tf.equal(w, 0), tf.float32)
@@ -135,7 +136,7 @@ class BubblePINN(keras.Model):
     uMseWalls = tf.reduce_sum(tf.square(uv[:,0] - uPred) * wallMask) / nWallsPoint
     vMseWalls = tf.reduce_sum(tf.square(uv[:,1] - vPred) * wallMask) / nWallsPoint
     pMseWalls = tf.reduce_sum(tf.square(uv[:,2] - pPred) * wallMask) / nWallsPoint
-    return uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
+    return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
 
 
   def train_step(self, data):
@@ -147,10 +148,10 @@ class BubblePINN(keras.Model):
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
-      uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
+      uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
         self.compute_losses(xy, t, w, uv)
       # replica's loss, divided by global batch size
-      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
+      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
               + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
               + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
       loss += tf.add_n(self.losses)
@@ -159,6 +160,7 @@ class BubblePINN(keras.Model):
     if self.saveGradStat:
       uMseGrad      = tape0.gradient(uMse,      self.trainable_variables)
       vMseGrad      = tape0.gradient(vMse,      self.trainable_variables)
+      pMseGrad      = tape0.gradient(pMse,      self.trainable_variables)
       pdeMse0Grad   = tape0.gradient(pdeMse0,   self.trainable_variables)
       pdeMse1Grad   = tape0.gradient(pdeMse1,   self.trainable_variables)
       pdeMse2Grad   = tape0.gradient(pdeMse2,   self.trainable_variables)
@@ -176,6 +178,7 @@ class BubblePINN(keras.Model):
     self.trainMetrics['loss'].update_state(loss)#*strategy.num_replicas_in_sync)
     self.trainMetrics['uMse'].update_state(uMse)
     self.trainMetrics['vMse'].update_state(vMse)
+    self.trainMetrics['pMse'].update_state(pMse)
     self.trainMetrics['pde0'].update_state(pdeMse0)
     self.trainMetrics['pde1'].update_state(pdeMse1)
     self.trainMetrics['pde2'].update_state(pdeMse2)
@@ -186,12 +189,15 @@ class BubblePINN(keras.Model):
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
     vMae = tf.reduce_sum(tf.abs((uvpPred[:,1] - uv[:,1]) * w)) / nDataPoint
+    pMae = tf.reduce_sum(tf.abs((uvpPred[:,2] - uv[:,2]) * w)) / nDataPoint
     self.trainMetrics['uMae'].update_state(uMae)
     self.trainMetrics['vMae'].update_state(vMae)
+    self.trainMetrics['pMae'].update_state(pMae)
     # track gradients coefficients
     if self.saveGradStat:
       self.record_layer_gradient(uMseGrad, 'u_')
       self.record_layer_gradient(vMseGrad, 'v_')
+      self.record_layer_gradient(pMseGrad, 'p_')
       self.record_layer_gradient(pdeMse0Grad, 'pde0_')
       self.record_layer_gradient(pdeMse1Grad, 'pde1_')
       self.record_layer_gradient(pdeMse2Grad, 'pde2_')
@@ -210,10 +216,10 @@ class BubblePINN(keras.Model):
     uv       = data[1]
 
     # Compute the data and pde losses
-    uvpPred, uMse, vMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
+    uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
       self.compute_losses(xy, t, w, uv)
     # replica's loss, divided by global batch size
-    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
+    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
             + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls )
 
@@ -221,6 +227,7 @@ class BubblePINN(keras.Model):
     self.validMetrics['loss'].update_state(loss)
     self.validMetrics['uMse'].update_state(uMse)
     self.validMetrics['vMse'].update_state(vMse)
+    self.validMetrics['pMse'].update_state(pMse)
     self.validMetrics['pde0'].update_state(pdeMse0)
     self.validMetrics['pde1'].update_state(pdeMse1)
     self.validMetrics['pde2'].update_state(pdeMse2)
@@ -231,8 +238,10 @@ class BubblePINN(keras.Model):
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
     vMae = tf.reduce_sum(tf.abs((uvpPred[:,1] - uv[:,1]) * w)) / nDataPoint
+    pMae = tf.reduce_sum(tf.abs((uvpPred[:,2] - uv[:,2]) * w)) / nDataPoint
     self.validMetrics['uMae'].update_state(uMae)
     self.validMetrics['vMae'].update_state(vMae)
+    self.validMetrics['pMae'].update_state(pMae)
 
     for key in self.validMetrics:
       self.validStat[key] = self.validMetrics[key].result()
@@ -268,8 +277,8 @@ class BubblePINN(keras.Model):
     #print(self.width)
     print('Layer regularization: {}'.format(self.reg))
     #print(self.reg)
-    print('Coefficients for data loss {} {}'.format(\
-          self.alpha[0], self.alpha[1]))
+    print('Coefficients for data loss {} {} {}'.format(\
+          self.alpha[0], self.alpha[1], self.alpha[2]))
     print('Coefficients for pde residual {} {} {}'.format(\
           self.beta[0], self.beta[1], self.beta[2]))
     print('Coefficients for domain wall loss {} {} {}'.format(\

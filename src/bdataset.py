@@ -268,13 +268,16 @@ class BubbleDataSet:
 
 
   # Obtain mask that filters points on walls
-  def get_wall_mask(self, xy, offset=[0,0,0,0]):
+  def get_wall_mask(self, xy, offset=[0,0,0,0], useAll=False):
     assert xy.shape[1] >= 2, "xy array must have at least 2 dimensions"
-    bWTop, bWRight = self.walls[0] - offset[0], self.walls[1] - offset[1]
-    bWBottom, bWLeft = self.walls[2] + offset[2], self.walls[3] + offset[3]
-    xMask = np.logical_and(xy[:,0] >= bWTop, xy[:,0] < self.size[0] - bWBottom)
-    yMask = np.logical_and(xy[:,1] >= bWLeft, xy[:,1] < self.size[1] - bWRight)
+    bWLeft, bWTop = self.walls[0] + offset[0], self.walls[1] + offset[1]
+    bWRight, bWBottom = self.walls[2] + offset[2], self.walls[3] + offset[3]
+    xMask = np.logical_and(xy[:,0] >= bWLeft, xy[:,0] < self.size[0] - bWRight)
+    yMask = np.logical_and(xy[:,1] >= bWBottom, xy[:,1] < self.size[1] - bWTop)
     mask = np.logical_and(xMask, yMask)
+
+    if useAll:
+      mask = np.logical_or(mask, True)
     return mask
 
 

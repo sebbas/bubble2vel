@@ -58,10 +58,12 @@ class BubbleDataSet:
     self.bc       = None # [nSamples, dim + 1]
     self.xyBc     = None # [nSamples, dim + 1]
     self.xyFluid  = None # [nSamples, dim + 1]
+    self.uvpFluid = None # [nSamples, dim + 1]
     self.bcDomain = None # [nSamples, dim + 1]
     self.xyDomain = None # [nSamples, dim + 1]
     # Arrays to store selection of points
     self.xyCol    = None # [nColPnt,  dim + 1]
+    self.uvpCol   = None # [nColPnt,  dim + 1]
     self.xyData   = None # [nDataPnt, dim + 1]
     self.uvData   = None # [nDataPnt, dim + 1]
     self.xyWalls  = None # [nWallPnt, dim + 1]
@@ -331,36 +333,38 @@ class BubbleDataSet:
     useAllWallPts = (self.nWallPnt < 0)
     self.select_wall_points(useAllWallPts)
 
-    # Init collocation point labels with 0.0
-    if zeroInitialCollocation:
-      colPntLabel = 0.0
-      uvCol = np.full((self.nColPnt, self.dim + 1), colPntLabel)
-    else: # Init collocation point label with random values in range of min/max of data point label
-      minU, maxU = np.min(self.bc[:,0]), np.max(self.bc[:,0])
-      minV, maxV = np.min(self.bc[:,1]), np.max(self.bc[:,1])
-      samplesU = np.random.uniform(low=minU, high=maxU, size=self.nColPnt)
-      samplesV = np.random.uniform(low=minV, high=maxV, size=self.nColPnt)
-      samplesU = np.expand_dims(samplesU, axis=-1)
-      samplesV = np.expand_dims(samplesV, axis=-1)
-      samplesP = np.zeros(self.nColPnt)
-      samplesP = np.expand_dims(samplesP, axis=-1)
-      uvCol = np.concatenate((samplesU, samplesV, samplesP), axis=-1)
+    # TODO: Add option to use old collocation point label init
+    if 0:
+      # Init collocation point labels with 0.0
+      if zeroInitialCollocation:
+        colPntLabel = 0.0
+        uvCol = np.full((self.nColPnt, self.dim + 1), colPntLabel)
+      else: # Init collocation point label with random values in range of min/max of data point label
+        minU, maxU = np.min(self.bc[:,0]), np.max(self.bc[:,0])
+        minV, maxV = np.min(self.bc[:,1]), np.max(self.bc[:,1])
+        samplesU = np.random.uniform(low=minU, high=maxU, size=self.nColPnt)
+        samplesV = np.random.uniform(low=minV, high=maxV, size=self.nColPnt)
+        samplesU = np.expand_dims(samplesU, axis=-1)
+        samplesV = np.expand_dims(samplesV, axis=-1)
+        samplesP = np.zeros(self.nColPnt)
+        samplesP = np.expand_dims(samplesP, axis=-1)
+        uvCol = np.concatenate((samplesU, samplesV, samplesP), axis=-1)
 
-    bcSamples  = np.concatenate((self.uvData, uvCol, self.uvWalls))
+    uvpSamples = np.concatenate((self.uvData, self.uvpCol, self.uvWalls))
     xytSamples = np.concatenate((self.xyData, self.xyCol, self.xyWalls))
     dataId     = np.full((len(self.xyData), 1), 1)
     colId      = np.full((len(self.xyCol), 1), 0)
     wallId     = np.full((len(self.xyWalls), 1), 2)
     idSamples  = np.concatenate((dataId, colId, wallId))
 
-    assert len(bcSamples) == len(xytSamples)
-    assert len(bcSamples) == len(idSamples)
+    assert len(uvpSamples) == len(xytSamples)
+    assert len(uvpSamples) == len(idSamples)
 
     # Shuffle the combined point arrays. Shuffle all arrays with same permutation
-    p = np.random.permutation(len(bcSamples))
-    self.labels  = bcSamples[p]
-    self.xyt     = xytSamples[p]
-    self.id      = idSamples[p]
+    perm = np.random.permutation(len(uvpSamples))
+    self.labels = uvpSamples[perm]
+    self.xyt    = xytSamples[perm]
+    self.id     = idSamples[perm]
 
     assert len(self.labels) == len(self.xyt)
     assert len(self.labels) == len(self.id)
@@ -628,6 +632,7 @@ class BubbleDataSet:
 
     bcFrameLst = []
     xyFrameLst = []
+    uvpFluidFrameLst = []
     xyFluidFrameLst = []
     sizeX, sizeY = self.size
 
@@ -686,6 +691,14 @@ class BubbleDataSet:
       fluidIndices = list(zip(nzIndices[1], nzIndices[0])) # np.nonzero returns data in [rows, columns], ie [y,x]
       xyFluidFrameLst.append(fluidIndices)
 
+      # Add fluid properties to list, same order as indices list
+      uvpLst = []
+      for idx in zip(nzIndices[0], nzIndices[1]):
+        i, j = idx[0], idx[1]
+        curUvp = self.vel[f,i,j,:]
+        uvpLst.append(curUvp)
+      uvpFluidFrameLst.append(uvpLst)
+
       # Keep track of number of bubble border cells and fluid cells per frame
       self.nBcBubble.append(len(bubbleBorderIndices))
       self.nFluid.append(len(fluidIndices))
@@ -703,11 +716,14 @@ class BubbleDataSet:
     self.bc   = np.zeros((np.sum(self.nBcBubble), self.dim + 1), dtype=float) # dim + 1 for p
     self.xyBc = np.zeros((np.sum(self.nBcBubble), self.dim + 1), dtype=float) # dim + 1 for t
     self.xyFluid = np.zeros((np.sum(self.nFluid), self.dim + 1), dtype=float)
+    self.uvpFluid = np.zeros((np.sum(self.nFluid), self.dim + 1), dtype=float)
 
     # ... and insert data from lists
     s, sFl = 0, 0
     for f in range(self.nTotalFrames):
-      assert len(bcFrameLst[f]) == len(xyFrameLst[f]), 'Number of velocity labels must match number of xy positions'
+      assert len(bcFrameLst[f]) == len(xyFrameLst[f]), 'Number of labels must match number of positions'
+      assert len(uvpFluidFrameLst[f]) == len(xyFluidFrameLst[f]), 'Number of labels must match number of positions'
+
       frame = f + self.startFrame
 
       # Insertion of bc and xyBc lists
@@ -732,7 +748,9 @@ class BubbleDataSet:
       tFl = np.full((nFl, 1), frame, dtype=float)
       eFl = sFl + nFl
       if nFl: # only insert if there is at least 1 cell
+        uvp = np.asarray(uvpFluidFrameLst[f], dtype=float)
         xy = np.asarray(xyFluidFrameLst[f], dtype=float)
+        self.uvpFluid[sFl:eFl, :] = uvp
         self.xyFluid[sFl:eFl, :] = np.hstack((xy, tFl))
         if UT.IMG_DEBUG:
           UT.save_array(self.xyFluid[sFl:eFl, :], '{}/positions'.format(self.sourceName), 'xyFluid_extract', frame, self.size)
@@ -812,6 +830,7 @@ class BubbleDataSet:
     self.nColPnt = nColPntPerFrame * self.nTotalFrames
     # Allocate array based on actual number of points
     self.xyCol = np.zeros((self.nColPnt, self.dim + 1))
+    self.uvpCol = np.zeros((self.nColPnt, self.dim + 1))
 
     print('Using {} collocation points'.format(self.nColPnt))
 
@@ -826,14 +845,17 @@ class BubbleDataSet:
 
       # Get all fluid coords for the current frame
       xyFluidFrame = self.get_xy_fluid(f)
+      uvpFluidFrame = self.get_uvp_fluid(f)
 
       # Only use every other grid point (self.colRes == interval) as collocation point
       mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
       xyFluidFrameMasked = xyFluidFrame[mask]
+      uvpFluidFrameMasked = uvpFluidFrame[mask]
 
       # Only use points within boundaries
       mask = self.get_wall_mask(xyFluidFrameMasked)
       xyFluidFrameMasked = xyFluidFrameMasked[mask]
+      uvpFluidFrameMasked = uvpFluidFrameMasked[mask]
 
       # Insert random selection of fluid coords into collocation array
       if UT.PRINT_DEBUG:
@@ -842,6 +864,7 @@ class BubbleDataSet:
       randIndices = rng.choice(indices, size=nColPntPerFrame, replace=False)
       e = s + nColPntPerFrame
       self.xyCol[s:e, :] = xyFluidFrameMasked[randIndices, :]
+      self.uvpCol[s:e, :] = uvpFluidFrameMasked[randIndices, :]
       s = e
 
       if UT.IMG_DEBUG:
@@ -928,6 +951,8 @@ class BubbleDataSet:
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.bc)
     dFile.create_dataset('xyBc', (nSampleBc, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyBc)
+    dFile.create_dataset('uvpFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.uvpFluid)
     dFile.create_dataset('xyFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyFluid)
     dFile.create_dataset('bcDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
@@ -958,6 +983,7 @@ class BubbleDataSet:
 
     self.bc       = np.array(dFile.get('bc'))
     self.xyBc     = np.array(dFile.get('xyBc'))
+    self.uvpFluid = np.array(dFile.get('uvpFluid'))
     self.xyFluid  = np.array(dFile.get('xyFluid'))
     self.bcDomain = np.array(dFile.get('bcDomain'))
     self.xyDomain = np.array(dFile.get('xyDomain'))
@@ -1021,6 +1047,12 @@ class BubbleDataSet:
     s = sum(self.nBcBubble[:f])
     e = s + self.nBcBubble[f]
     return self.bc[s:e, ...]
+
+
+  def get_uvp_fluid(self, f):
+    s = sum(self.nFluid[:f])
+    e = s + self.nFluid[f]
+    return self.uvpFluid[s:e, ...]
 
 
   def get_xy_walls(self, f):

@@ -416,9 +416,9 @@ class BubbleDataSet:
       time = UT.time_world_to_dimensionless(time, T)
 
       # Only non-dimensionalize velocities from flownet dataset
-      vel = label
+      vel = uv
       if self.source == UT.SRC_FLOWNET:
-        vel = UT.vel_domain_to_world(label, worldSize, fps)
+        vel = UT.vel_domain_to_world(uv, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
 
       yield [pos, time, id, phi], vel

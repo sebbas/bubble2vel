@@ -281,7 +281,7 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, worldSize, fps, L, T, onlyBc=False):
+  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, onlyBc=False):
     print('Generating prediction points')
 
     for f in range(begin, end):
@@ -305,7 +305,7 @@ class BubbleDataSet:
       t[:, 0]  = xyPredMasked[:, self.dim]
 
       # Convert from domain space to world space
-      pos  = UT.pos_domain_to_world(xy, worldSize)
+      pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
       time = UT.time_domain_to_world(t, fps)
 
       # Convert from world space to dimensionless quantities
@@ -366,7 +366,7 @@ class BubbleDataSet:
     assert len(self.labels) == len(self.id)
 
 
-  def generate_train_valid_batch(self, begin, end, worldSize, fps, \
+  def generate_train_valid_batch(self, begin, end, worldSize, imageSize, fps, \
                                  V, L, T, batchSize=64, shuffle=True):
     generatorType = 'training' if begin == 0 else 'validation'
     UT.print_info('\nGenerating {} sample {} batches'.format(batchSize, generatorType))
@@ -401,7 +401,7 @@ class BubbleDataSet:
         label  = label[p]
 
       # Convert from domain space to world space
-      pos  = UT.pos_domain_to_world(xy, worldSize)
+      pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
       time = UT.time_domain_to_world(t, fps)
 
       # Convert from world space to dimensionless quantities

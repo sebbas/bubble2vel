@@ -232,7 +232,7 @@ def vel_domain_to_world(input, worldSize, fps):
   return input * (fps * (worldSize / imageSize))
 
 
-def pos_domain_to_world(input, worldSize):
+def pos_domain_to_world(input, worldSize, imageSize):
   return input * (worldSize / imageSize)
 
 

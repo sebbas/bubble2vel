@@ -107,16 +107,16 @@ print('{} data / collocation points in training, {} in validation'.format(nTrain
 
 assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 if args.source == UT.SRC_FLOWNET:
-  worldSize, fps, V, L, T = UT.worldSize, UT.fps, UT.V, UT.L, UT.T
+  worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
 if args.source == UT.SRC_FLASHX:
-  worldSize, fps, V, L, T = UT.worldSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
+  worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
 # Generators
 trainGen = dataSet.generate_train_valid_batch(0, nTrain, \
-                                              worldSize, fps, V, L, T, \
+                                              worldSize, imageSize, fps, V, L, T, \
                                               batchSize=args.batchSize)
 validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, \
-                                              worldSize, fps, V, L, T, \
+                                              worldSize, imageSize, fps, V, L, T, \
                                               batchSize=args.batchSize)
 
 # Create model

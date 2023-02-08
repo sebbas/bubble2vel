@@ -10,6 +10,7 @@ tf.random.set_seed(2022)
 from tensorflow import keras
 from blayers import *
 
+import butils as UT
 
 ''' --- TODO ---
 strategy = tf.distribute.MirroredStrategy()
@@ -63,7 +64,50 @@ class BubblePINN(keras.Model):
     inputs: [xy, t]
     '''
     xyt = tf.concat([inputs[0], inputs[1]], axis=-1)
-    return self.mlp(xyt)
+    uvp = self.mlp(xyt)
+
+    filter = 0
+    if filter:
+      xy   = inputs[0]
+      x, y = xy[:,0], xy[:,1]
+
+      pixelSize = UT.get_pixelsize_dimensionless(UT.worldSize_fx, UT.imageSize_fx, UT.L_fx)
+      size = pixelSize * (UT.imageSize_fx-1)
+      #tf.print(size)
+
+      walls = [1, 0, 1, 1] # Determines open or closed walls (left, top, right, bottom)
+      bWidth = pixelSize * 9
+
+      wallLeft   = y/size if walls[0] else 1
+      wallTop    = (size-y)/size if walls[1] else 1
+      wallRight  = (size-x)/size if walls[2] else 1
+      wallBottom = x/size if walls[3] else 1
+
+      # Function d filters network effect at bottom border
+      d = tf.expand_dims(wallLeft*wallTop*wallRight*wallBottom, axis=-1)
+
+      wallLeft   = y-bWidth if walls[0] else 1
+      wallTop    = size-y-bWidth if walls[1] else 1
+      wallRight  = size-x-bWidth if walls[2] else 1
+      wallBottom = x-bWidth if walls[3] else 1
+
+      wallLeft = tf.cast(tf.math.greater(wallLeft, 0), tf.float32)
+      wallTop = tf.cast(tf.math.greater(wallTop, 0), tf.float32)
+      wallRight = tf.cast(tf.math.greater(wallRight, 0), tf.float32)
+      wallBottom = tf.cast(tf.math.greater(wallBottom, 0), tf.float32)
+
+      # Function g sets a no-slip boundary condition in wall points
+      g     = tf.expand_dims(wallLeft*wallTop*wallRight*wallBottom, axis=-1)
+      omitPBc = 1
+      if omitPBc:
+        uv, p = uvp[:,:2], uvp[:,2]
+        p     = tf.expand_dims(p, axis=-1)
+        uv    = g * uv
+        uvp   = tf.concat([uv, p], axis=-1)
+      else:
+        uvp   = g * uvp
+
+    return uvp
 
 
   def record_layer_gradient(self, grads, baseName):

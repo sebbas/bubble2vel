@@ -16,39 +16,37 @@ SRC_FLASHX  = 2
 
 MODEL_NAME = 'bubble2vel'
 
-# Reference quantities for non-dimensionalization for flownet (water)
-V          = 0.625               # [meter/second],   Reference velocity
-L          = 0.02                # [meter],          Reference length
-T          = L / V               # [second],         Reference time
-_nu        = 2.938e-7            # [meter^2/second], Kinematic viscosity at 100 Celsius
-Re_fn      = (V * L) / _nu       # dimensionless,    Reynolds number
+nDim = 2
 
+# Values for experimental dataset (flownet, water)
+# Reference quantities for non-dimensionalization
+V         = 0.625               # [meter/second],   Reference velocity
+L         = 0.02                # [meter],          Reference length
+T         = L / V               # [second],         Reference time
+_nu       = 2.938e-7            # [meter^2/second], Kinematic viscosity at 100 Celsius
+Re_fn     = (V * L) / _nu       # dimensionless,    Reynolds number
 # World space quantities
 fps       = 400                  # [frames/sec]
 pixelSize = 1.922e-5             # [meters] at resolution 1024px
 worldSize = pixelSize * 1024     # [meters], must mult with res that the pixel size was captured at
-
-fps_fx = 125
-worldSize_fx = 0.02
-
 # Domain space quantities
-nDim = 2
 imageSize = 512
+
+
+# Values for experimental dataset (flownet, water)
+# Reference quantities for non-dimensionalization
+V_fx         = 0.0868                 # [meter/second],     Reference velocity
+L_fx         = 7e-4                   # [meter],            Reference length
+T_fx         = L_fx / V_fx            # [second],           Reference time
+_rho_fx      = 1620                   # [meter^2/second],   Density
+_mu_fx       = 4e-4                   # [N*second/meter^2], Dynamic viscosity
+_nu_fx       = _mu_fx / _rho_fx       # [meter^2/second],   Kinematic viscosity
+Re_fx        = (V_fx * L_fx) / _nu_fx # dimensionless,      Reynolds number
+# World space quantities
+fps_fx       = 125
+worldSize_fx = 0.0168 # 16.8 millimeters
+# Domain space quantities
 imageSize_fx = 384
-
-# Reference quantities for non-dimensionalization for flashx (FC72)
-V_fx    = 0.0868                 # [meter/second],     Reference velocity
-L_fx    = 7e-4                   # [meter],            Reference length
-# TODO: Remove scaling (only needed since range of simulation data is too large for training)
-scaling_fx = 10.0
-V_fx *= scaling_fx
-L_fx *= scaling_fx
-
-T_fx    = L_fx / V_fx            # [second],           Reference time
-_rho_fx = 1620                   # [meter^2/second],   Density
-_mu_fx  = 4e-4                   # [N*second/meter^2], Dynamic viscosity
-_nu_fx  = _mu_fx / _rho_fx       # [meter^2/second],   Kinematic viscosity
-Re_fx   = (V_fx * L_fx) / _nu_fx # dimensionless,      Reynolds number
 
 
 def _ensure_exists(dir):

@@ -7,7 +7,7 @@ import subprocess
 import h5py as h5
 
 PRINT_DEBUG = 1
-IMG_DEBUG = 0
+IMG_DEBUG = 1
 VID_DEBUG = 0
 FILE_IO   = 0
 

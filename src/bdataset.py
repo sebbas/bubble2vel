@@ -425,7 +425,7 @@ class BubbleDataSet:
 
 
   # Define domain border locations + attach bc
-  def extract_wall_points(self):
+  def extract_wall_points(self, useDataBc=False):
     UT.print_info('Extracting domain wall points')
 
     rng = np.random.default_rng(2022)
@@ -461,7 +461,7 @@ class BubbleDataSet:
         numCells = sizeY - bWLeft - bWRight
         x = np.full((numCells,), bWTop, dtype=float)
         y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells,), frame, dtype=float)
         bcLst.extend(np.tile(bCTop, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -470,7 +470,7 @@ class BubbleDataSet:
         numCells = sizeX - bWTop - bWBottom
         x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)
         y = np.full((numCells,), sizeX-1-bWRight, dtype=float)
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells,), frame, dtype=float)
         bcLst.extend(np.tile(bCRight, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -479,7 +479,7 @@ class BubbleDataSet:
         numCells = sizeY - bWLeft - bWRight
         x = np.full((numCells,), sizeY-1-bWBottom, dtype=float)
         y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)[::-1]
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells,), frame, dtype=float)
         bcLst.extend(np.tile(bCBottom, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
 
@@ -488,9 +488,17 @@ class BubbleDataSet:
         numCells = sizeX - bWTop - bWBottom
         x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)[::-1]
         y = np.full((numCells,), bWLeft, dtype=float)
-        t = np.full((numCells, 1), frame, dtype=float)
+        t = np.full((numCells,), frame, dtype=float)
         bcLst.extend(np.tile(bCLeft, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
+
+      # Using boundary value from dataset instead
+      if useDataBc:
+        bcLst = [] # Override bc list and copy value from dataset
+        for i, j, _ in xyLst:
+          i, j = int(i), int(j)
+          curUvp = self.vel[f,i,j,:]
+          bcLst.append(curUvp)
 
       bcFrameLst.append(bcLst)
       xyFrameLst.append(xyLst)

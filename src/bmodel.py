@@ -127,7 +127,7 @@ class BubblePINN(keras.Model):
         self.trainMetrics[prefix+'std'].update_state(gStd)
 
 
-  def compute_losses(self, xy, t, w, uv):
+  def compute_losses(self, xy, t, w, phi, uv):
     # Track computation for 2nd derivatives for u, v
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
       tape2.watch(xy)
@@ -187,13 +187,14 @@ class BubblePINN(keras.Model):
     xy       = data[0][0]
     t        = data[0][1]
     w        = data[0][2]
+    phi      = data[0][3]
     uv       = data[1]
 
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
       uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-        self.compute_losses(xy, t, w, uv)
+        self.compute_losses(xy, t, w, phi, uv)
       # replica's loss, divided by global batch size
       loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
               + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
@@ -257,11 +258,12 @@ class BubblePINN(keras.Model):
     xy       = data[0][0]
     t        = data[0][1]
     w        = data[0][2]
+    phi      = data[0][3]
     uv       = data[1]
 
     # Compute the data and pde losses
     uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-      self.compute_losses(xy, t, w, uv)
+      self.compute_losses(xy, t, w, phi, uv)
     # replica's loss, divided by global batch size
     loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \

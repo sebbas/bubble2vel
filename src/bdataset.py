@@ -52,8 +52,7 @@ class BubbleDataSet:
     self.nWallPnt = wallPoints
     self.nDataPnt = dataPoints
     # Array to store ground truth data (after processing .flo input)
-    self.vel      = None # [frames, width, height, dim]
-    self.phi      = None # [frames, width, height]
+    self.vel      = None # [frames, width, height, dim + 1]
     # Arrays to store processed data (after processing ground truth)
     self.bc       = None # [nSamples, dim + 1]
     self.xyBc     = None # [nSamples, dim + 1]
@@ -104,12 +103,12 @@ class BubbleDataSet:
       # Only allocate arrays once (assume same dimension for every frame)
       if allocArrays:
         temperature = np.zeros((self.nTotalFrames, self.size[1], self.size[0]), dtype=float)
-        self.phi = np.zeros((self.nTotalFrames, self.size[1], self.size[0]), dtype=float)
+        pressure = np.zeros((self.nTotalFrames, self.size[1], self.size[0]), dtype=float)
         self.vel = np.zeros((self.nTotalFrames, self.size[1], self.size[0], self.dim + 1), dtype=float)
         allocArrays = False
       else:
         assert temperature.shape[1] == self.size[1] and temperature.shape[2] == self.size[0]
-        assert self.phi.shape[1] == self.size[1] and self.phi.shape[2] == self.size[0]
+        assert pressure.shape[1] == self.size[1] and pressure.shape[2] == self.size[0]
         assert self.vel.shape[1] == self.size[1] and self.vel.shape[2] == self.size[0]
 
       bcnt = 0 # Current block number
@@ -129,37 +128,38 @@ class BubbleDataSet:
                 ex = sx + self.pshape[2] # end in x dimension
                 sy = bj * self.pshape[1] + pj # start in y dimension
                 temperature[cnt, sy, sx:ex] = temp[0:self.pshape[2]]
-                self.phi[cnt, sy, sx:ex] = dfun[0:self.pshape[2]]
+                pressure[cnt, sy, sx:ex] = pres[0:self.pshape[2]]
                 self.vel[cnt, sy, sx:ex, 0] = velx[0:self.pshape[2]]
                 self.vel[cnt, sy, sx:ex, 1] = vely[0:self.pshape[2]]
-                self.vel[cnt, sy, sx:ex, 2] = pres[0:self.pshape[2]]
+                self.vel[cnt, sy, sx:ex, 2] = dfun[0:self.pshape[2]]
             bcnt += 1
 
       if 0 and UT.PRINT_DEBUG:
         tempMin, tempMax = temperature[cnt].min(), temperature[cnt].max()
         print('Frame {}: Min/Max temp [{},{}]'.format(frame, tempMin, tempMax))
-        dfunMin, dfunMax = self.phi[cnt].min(), self.phi[cnt].max()
-        print('Frame {}: Min/Max levelset [{},{}]'.format(frame, dfunMin, dfunMax))
+        presMin, presMax = pressure[cnt].min(), pressure[cnt].max()
+        print('Frame {}: Min/Max pressure [{},{}]'.format(frame, presMin, presMax))
+
         velx = abs(max(self.vel[cnt,:,:,0].min(), self.vel[cnt,:,:,0].max(), key = abs))
         vely = abs(max(self.vel[cnt,:,:,1].min(), self.vel[cnt,:,:,1].max(), key = abs))
         print('Frame {}: Maximum vel [{}, {}]'.format(frame, velx, vely))
-        presMin, presMax = self.vel[cnt,:,:,2].min(), self.vel[cnt,:,:,2].max()
-        print('Frame {}: Min/Max pressure [{},{}]'.format(frame, presMin, presMax))
+        dfunMin, dfunMax = self.vel[cnt,:,:,2].min(), self.vel[cnt,:,:,2].max()
+        print('Frame {}: Min/Max levelset [{},{}]'.format(frame, dfunMin, dfunMax))
 
       if UT.IMG_DEBUG:
         # Raw grids
         UT.save_image(temperature[cnt], '{}/raw'.format(self.sourceName), 'flashx_temp_raw', frame, cmap='jet')
-        UT.save_image(self.phi[cnt], '{}/raw'.format(self.sourceName), 'flashx_phi_raw', frame, cmap='jet')
+        UT.save_image(pressure[cnt], '{}/raw'.format(self.sourceName), 'flashx_pres_raw', frame, cmap='jet')
         UT.save_image(self.vel[cnt,:,:,0], '{}/raw'.format(self.sourceName), 'flashx_velx_raw', frame, cmap='hot')
         UT.save_image(self.vel[cnt,:,:,1], '{}/raw'.format(self.sourceName), 'flashx_vely_raw', frame, cmap='hot')
-        UT.save_image(self.vel[cnt,:,:,2], '{}/raw'.format(self.sourceName), 'flashx_pres_raw', frame, cmap='jet')
+        UT.save_image(self.vel[cnt,:,:,2], '{}/raw'.format(self.sourceName), 'flashx_phi_raw', frame, cmap='jet', vmin=-0.5, vmax=0.5)
         # Velocity matplotlib plots
         UT.save_velocity(self.vel[cnt], '{}/plots'.format(self.sourceName), 'flashx_vel_stream', frame, size=self.size, type='stream', density=5.0)
         UT.save_velocity(self.vel[cnt], '{}/plots'.format(self.sourceName), 'flashx_vel_vector', frame, size=self.size, type='quiver', arrow_res=8, cmin=0.0, cmax=5.0)
         # Grid matplotlib plots
         UT.save_plot(temperature[cnt], '{}/plots'.format(self.sourceName), 'flashx_temp_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
-        UT.save_plot(self.vel[cnt,:,:,2], '{}/plots'.format(self.sourceName), 'flashx_pres_plt', frame, size=self.size, cmin=-50.0, cmax=50.0, cmap='jet')
-        UT.save_plot(self.phi[cnt], '{}/plots'.format(self.sourceName), 'flashx_phi_plt', frame, size=self.size, cmin=-1.0, cmax=1.0, cmap='jet')
+        UT.save_plot(pressure[cnt], '{}/plots'.format(self.sourceName), 'flashx_pres_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
+        UT.save_plot(self.vel[cnt,:,:,2], '{}/plots'.format(self.sourceName), 'flashx_phi_plt', frame, size=self.size, cmin=-1.0, cmax=1.0, cmap='jet')
         # Distribution velocities in bins
         UT.save_velocity_bins(self.vel[cnt,:,:,0], '{}/histograms'.format(self.sourceName), 'flashx_velx_bins', frame, bmin=-1.0, bmax=1.0, bstep=0.05)
         UT.save_velocity_bins(self.vel[cnt,:,:,1], '{}/histograms'.format(self.sourceName), 'flashx_vely_bins', frame, bmin=-1.0, bmax=1.0, bstep=0.05)
@@ -199,8 +199,8 @@ class BubbleDataSet:
       # Only allocate arrays once (assume same dimension for every frame)
       if allocArrays:
         self.vel = np.zeros((self.nTotalFrames, sizeFromFile[1], sizeFromFile[0], self.dim + 1), dtype=float)
-        self.phi = np.ones((self.nTotalFrames, sizeFromFile[1], sizeFromFile[0]), dtype=float)
-        self.phi *= (-1.0) * self.phiInit
+        # Initialize 3rd dimension with negative phi init value
+        self.vel[:,:,:,2] = -1.0 * self.phiInit
         allocArrays = False
       else:
         assert sizeFromFile[0] == self.size[0], 'Width in dataset does not match width from files, {} vs {}'.format(self.size[0], sizeFromFile[0])
@@ -376,10 +376,11 @@ class BubbleDataSet:
     UT.print_info('\nGenerating {} sample {} batches'.format(batchSize, generatorType))
 
     # Arrays to store data + collocation + wall point batch
-    label  = np.zeros((batchSize, self.dim + 1), dtype=float)
+    uv     = np.zeros((batchSize, self.dim + 1), dtype=float)
     xy     = np.zeros((batchSize, self.dim), dtype=float)
     t      = np.zeros((batchSize, 1),        dtype=float)
     id     = np.zeros((batchSize, 1),        dtype=float)
+    phi    = np.zeros((batchSize, 1),        dtype=float)
 
     s = begin
     while True:
@@ -388,21 +389,23 @@ class BubbleDataSet:
       e = s + batchSize
 
       # Fill batch arrays
-      label[:, :] = self.labels[s:e, :]
-      xy[:, :]    = self.xyt[s:e, :self.dim]
-      t[:, 0]     = self.xyt[s:e, self.dim]
-      id[:, 0]    = self.id[s:e, 0]
+      uv[:, :self.dim] = self.labels[s:e, :self.dim]
+      phi[:, 0]        = self.labels[s:e, self.dim] # phi for now
+      xy[:, :]         = self.xyt[s:e, :self.dim]
+      t[:, 0]          = self.xyt[s:e, self.dim]
+      id[:, 0]         = self.id[s:e, 0]
 
       s  += batchSize
 
       # Shuffle batch
       if shuffle:
         assert len(xy) == batchSize
-        p      = np.random.permutation(batchSize)
-        xy     = xy[p]
-        t      = t[p]
-        id     = id[p]
-        label  = label[p]
+        perm = np.random.permutation(batchSize)
+        xy   = xy[perm]
+        t    = t[perm]
+        id   = id[perm]
+        uv   = uv[perm]
+        phi  = phi[perm]
 
       # Convert from domain space to world space
       pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
@@ -418,7 +421,7 @@ class BubbleDataSet:
         vel = UT.vel_domain_to_world(label, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
 
-      yield [pos, time, id], vel
+      yield [pos, time, id, phi], vel
 
 
   # Define domain border locations + attach bc
@@ -649,8 +652,9 @@ class BubbleDataSet:
       U, V = self.vel[f,:,:,0], self.vel[f,:,:,1]
       mag = np.sqrt(np.square(U) + np.square(V))
 
+      # Thicken interface and generate levelset if needed (flownet only)
       assert self.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], "Unknown fluid points source"
-      curPhi = self.phi[f,:,:]
+      curPhi = self.vel[f,:,:,2]
       if self.source == UT.SRC_FLOWNET:
         self._extract_flownet_points(mag, intersection, flags, velEps)
         self._thicken_interface(self.interface, flags, intersection, phi=None, fromInside=True)
@@ -667,7 +671,7 @@ class BubbleDataSet:
         UT.save_image(mag, '{}/all'.format(self.sourceName), 'magnitude_all', frame)
         UT.save_image(curPhi, '{}/all'.format(self.sourceName), 'phi_all', frame, cmap='jet')
         if self.source == UT.SRC_FLOWNET:
-          UT.save_plot(curPhi, '{}/plots'.format(self.sourceName), 'flownet_phi_plt', frame, size=self.size, cmin=np.min(curPhi), cmax=np.max(curPhi), cmap='jet')
+          UT.save_plot(self.vel[f,:,:,2], '{}/plots'.format(self.sourceName), 'flownet_phi_plt', frame, size=self.size, cmin=np.min(curPhi), cmax=np.max(curPhi), cmap='jet')
 
       # Add bubble border positions to xyBc list
       nzIndices = np.nonzero(intersection)

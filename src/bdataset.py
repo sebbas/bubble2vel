@@ -1043,6 +1043,9 @@ class BubbleDataSet:
     return self.source
 
 
+  def get_source_name(self):
+    return self.sourceName
+
   def get_xy_bc(self, f):
     s = sum(self.nBcBubble[:f])
     e = s + self.nBcBubble[f]

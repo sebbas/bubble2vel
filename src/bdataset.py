@@ -72,7 +72,7 @@ class BubbleDataSet:
     self.xyt      = None
     self.id       = None
     # Resolution of collocation points (only use every other points as col point)
-    self.colRes = 4
+    self.colRes = 1
     # FlashX
     self.pshape = [] # Num of points per block in each dimension
     self.bshape = [] # Num of blocks in each dimension

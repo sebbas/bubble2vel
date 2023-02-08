@@ -823,10 +823,9 @@ class BubbleDataSet:
       e = s + nDataPntPerFrame
       self.xyData[s:e, :] = xyDataFrameMasked[randIndices, :]
       self.uvData[s:e, :] = uvDataFrameMasked[randIndices, :]
-      s = e
-
       if UT.IMG_DEBUG:
         UT.save_array(self.xyData[s:e, :], '{}/data'.format(self.sourceName), 'datapts_select', frame, self.size)
+      s = e
 
 
   def select_collocation_points(self, default=False):

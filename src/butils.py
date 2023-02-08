@@ -55,11 +55,11 @@ def _ensure_exists(dir):
   return dir
 
 
-def save_image(src, subdir, name, frame, i=0, origin='lower', cmap='gray'):
+def save_image(src, subdir, name, frame, i=0, origin='lower', cmap='gray', vmin=None, vmax=None):
   imgDir = _ensure_exists('../img')
   dir = _ensure_exists(os.path.join(imgDir, subdir))
   fname = '%s_i%02d_%04d.png' % (name, i, frame) if i>0 else '%s_%04d.png' % (name, frame)
-  plt.imsave(os.path.join(dir, fname), src, origin=origin, cmap=cmap)
+  plt.imsave(os.path.join(dir, fname), src, origin=origin, cmap=cmap, vmin=vmin, vmax=vmax)
   plt.clf()
 
 
@@ -70,7 +70,7 @@ def save_array(src, subdir, name, frame, size):
   save_image(grid, subdir, name, frame)
 
 
-def save_figure_plot(fig, subdir, name, frame, colorbar=False, plot=None, clip=True, cmin=0, cmax=1):
+def save_figure_plot(fig, subdir, name, frame, colorbar=False, plot=None, clip=True, cmin=0, cmax=1, transparent=True, axis='on'):
   imgDir = _ensure_exists('../img')
   dir = _ensure_exists(os.path.join(imgDir, subdir))
   fname = '%s_%04d.png' % (name, frame)
@@ -81,7 +81,8 @@ def save_figure_plot(fig, subdir, name, frame, colorbar=False, plot=None, clip=T
     cax = fig.add_axes([0.92, 0.11, 0.02, 0.77])
     fig.colorbar(plot, orientation='vertical', cax=cax)
 
-  plt.savefig(os.path.join(dir, fname))
+  plt.axis(axis)
+  plt.savefig(os.path.join(dir, fname), transparent=transparent)
   plt.close(fig)
 
 
@@ -103,7 +104,7 @@ def save_video(subdir, name, imgDir, fps=5):
 
 
 def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
-                  type='stream', arrow_res=1, cmin=0.0, cmax=5.0, density=4.5, \
+                  type='stream', arrow_res=1, cmin=0.0, cmax=5.0, density=2.0, \
                   filterZero=False, cmap='jet'):
   fig, ax = plt.subplots(1, 1, figsize=(10,10))
   x = np.arange(0, int(size[0]), arrow_res)
@@ -112,10 +113,13 @@ def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
   U, V = src[:,:,0], src[:,:,1]
   M = np.sqrt(np.square(U) + np.square(V))
   colorbar = False
+  axis = 'on'
   if type == 'stream':
-    plot = ax.streamplot(X, Y, U, V, density=density, linewidth=1.0)#, color='#A23BEC')
+    axis = 'off'
+    plot = ax.streamplot(X, Y, U, V, density=density, linewidth=1.0, color='white')#, color='#A23BEC')
   elif type == 'quiver':
     colorbar = True
+    transparentBg = False
     U = U[::arrow_res, ::arrow_res]
     V = V[::arrow_res, ::arrow_res]
     M = M[::arrow_res, ::arrow_res]
@@ -131,13 +135,13 @@ def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
     colorbar = True
     cmin = np.min(M)
     cmax = np.max(M)
-    plot = plt.imshow(M, cmap=cmap)
+    plot = plt.imshow(M, cmap=cmap, cmin=-1.0, cmax=1.0)
 
   ax.set_xlim(0, size[0])
   ax.set_ylim(0, size[1])
   if invertY:
     ax.invert_yaxis()
-  save_figure_plot(fig, subdir, name, frame, colorbar=colorbar, plot=plot, cmin=cmin, cmax=cmax)
+  save_figure_plot(fig, subdir, name, frame, colorbar=colorbar, plot=plot, cmin=cmin, cmax=cmax, axis=axis)
 
 
 def save_velocity_bins(src, subdir, name, frame, bmin, bmax, bstep):
@@ -286,7 +290,6 @@ def save_array_hdf5(arrays, dir='../data/', filePrefix='bdata', size=[512,512], 
     dFile.attrs['frame'] = frame
 
     for key, value in arrays.items():
-      print(value.shape)
       dFile.create_dataset(key, size, compression=compType, compression_opts=compLevel, \
                            dtype=dtype, chunks=True, data=value)
 

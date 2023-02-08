@@ -29,9 +29,11 @@ parser.add_argument('-b', '--onlyBc', default=False, action='store_true',
 # Model being used for predictions
 parser.add_argument('-n', '--name', default=None,
                     help='name of model that is used to make predictions')
+parser.add_argument('-p', '--predFrames', type=int, default=100,
+                    help='number of frames to predict')
 parser.add_argument('-s', '--startFrame', type=int, default=0,
                     help='first frame to predict')
-parser.add_argument('-e', '--endFrame', type=int, default=399,
+parser.add_argument('-e', '--endFrame', type=int, default=100,
                     help='last frame to predict')
 parser.add_argument('-f', '--file', default='../data/bdata.h5',
                     help='the file(s) containing flow velocity training data')
@@ -52,18 +54,20 @@ bubbleNet.load_weights(tf.train.latest_checkpoint(args.name)).expect_partial()
 
 size                   = dataSet.get_size()
 source                 = dataSet.get_source()
-predStart, predEnd     = args.startFrame, args.endFrame
+sourceName             = dataSet.get_source_name()
+numPredFrames          = args.predFrames
+startFrame, endFrame   = args.startFrame, args.endFrame
 cmin, cmax             = 0.0, 15.0
 relErrULst, relErrVLst = [], []
 
 assert source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 if source == UT.SRC_FLOWNET:
-  worldSize, fps, L, T = UT.worldSize, UT.fps, UT.L, UT.T
+  worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
 if source == UT.SRC_FLASHX:
-  worldSize, fps, L, T = UT.worldSize_fx, UT.fps_fx, UT.L_fx, UT.T_fx
+  worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
 # Generators
-predGen = dataSet.generate_predict_pts(predStart, predEnd, worldSize, fps, L, T, onlyBc=args.onlyBc)
+predGen = dataSet.generate_predict_pts(0, numPredFrames, worldSize, imageSize, fps, L, T, onlyBc=args.onlyBc)
 uvpPred = bubbleNet.predict(predGen)
 predVels = uvpPred[:, :UT.nDim]
 predP = copy.deepcopy(uvpPred[:, 2])
@@ -91,53 +95,66 @@ if source == UT.SRC_FLOWNET:
 # Plots
 
 predVelOffset = 0 # just a helper var to find beginning of next frame in predVels array
-for frame in range(predStart, predEnd):
+for f in range(0, numPredFrames):
 
+  frame = f + startFrame
   ### Original vel plots
 
   plotOrig = True
   if plotOrig:
-    xyBc    = dataSet.get_xy_bc(frame)
-    xyFluid = dataSet.get_xy_fluid(frame)
-    bc      = dataSet.get_bc(frame)
+    xyBc     = dataSet.get_xy_bc(f)
+    xyFluid  = dataSet.get_xy_fluid(f)
+    uvp      = dataSet.get_bc(f)
+    uvpFluid = dataSet.get_uvp_fluid(f)
 
-    arrow_res = 2 # if args.onlyBc else 8
+    arrow_res = 2 if args.onlyBc else 8
 
-    origvelGrid = np.zeros((size[0], size[1], UT.nDim))
+    origvelGrid = np.zeros((size[0], size[1], UT.nDim + 1))
     origvelMag  = np.zeros((size))
 
-    xyOrig = xyBc #if args.onlyBc else xyFluid
-
-    # Only use points within boundaries
-    mask = dataSet.get_wall_mask(xyOrig)
-    xyMasked = xyBc[mask]
-    bcMasked = bc[mask]
-
-    for xyt, uvp in zip(xyMasked, bcMasked):
+    '''
+    # Plot everything
+    xyOrig = np.concatenate((xyBc, xyFluid))
+    uvpOrig = np.concatenate((uvp, uvpFluid))
+    for xyt, uvp in zip(xyOrig, uvpOrig):
       xi, yi = int(xyt[0]), int(xyt[1])
       origvelMag[yi, xi] = np.sqrt(np.square(uvp[0]) + np.square(uvp[1]))
-      origvelGrid[yi, xi] = uvp[:2]
+      origvelGrid[yi, xi] = uvp[:]
+    UT.save_plot(origvelGrid[:,:,2], '{}/origvels/plots'.format(sourceName), 'origphi_plt', frame, size=size, cmin=-1.0, cmax=1.0, cmap='jet')
+    '''
 
-    UT.save_image(origvelGrid[:,:,0], 'origvels/raw', 'origvelsx_raw', frame, cmap='jet')
-    UT.save_image(origvelGrid[:,:,1], 'origvels/raw', 'origvelsy_raw', frame, cmap='jet')
-    UT.save_image(origvelMag, 'origvels/raw', 'origvelsmag_raw', frame)
+    xyOrig = xyBc if args.onlyBc else xyFluid
+    uvpOrig = uvp if args.onlyBc else uvpFluid
+
+    # Only use points within boundaries
+    mask = dataSet.get_wall_mask(xyOrig, useAll=True)
+    xyMasked = xyOrig[mask]
+    uvpMasked = uvpOrig[mask]
+    for xyt, uvp in zip(xyMasked, uvpMasked):
+      xi, yi = int(xyt[0]), int(xyt[1])
+      origvelMag[yi, xi] = np.sqrt(np.square(uvp[0]) + np.square(uvp[1]))
+      origvelGrid[yi, xi] = uvp[:]
+
+    UT.save_image(origvelGrid[:,:,0], '{}/origvels/raw'.format(sourceName), 'origvelsx_raw', frame, cmap='jet')
+    UT.save_image(origvelGrid[:,:,1], '{}/origvels/raw'.format(sourceName), 'origvelsy_raw', frame, cmap='jet')
+    UT.save_image(origvelMag, '{}/origvels/raw'.format(sourceName), 'origvelsmag_raw', frame)
 
     if UT.PRINT_DEBUG:
       print('origvel u [{}, {}], v [{}, {}]'.format( \
             np.min(origvelGrid[:,:,0]), np.max(origvelGrid[:,:,0]), \
             np.min(origvelGrid[:,:,1]), np.max(origvelGrid[:,:,1])))
 
-    UT.save_plot(origvelMag, 'origvels/plots', 'origvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(origvelMag, '{}/origvels/plots'.format(sourceName), 'origvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(origvelGrid[:,:,2], '{}/origvels/plots'.format(sourceName), 'origphi_plt', frame, size=size, cmin=-1.0, cmax=1.0, cmap='jet')
 
-    UT.save_velocity(origvelGrid, 'origvels/plots', 'velocity_stream', frame, size=size, type='stream', density=5.0)
-    UT.save_velocity(origvelGrid, 'origvels/plots', 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, cmin=cmin, cmax=cmax, filterZero=True)
+    UT.save_velocity(origvelGrid, '{}/origvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')
+    UT.save_velocity(origvelGrid, '{}/origvels/plots'.format(sourceName), 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, cmin=cmin, cmax=cmax, filterZero=True)
 
   ### Prediction vel plots
 
   if predVels is not None:
-    xyBc    = dataSet.get_xy_bc(frame)
-    xyFluid = dataSet.get_xy_fluid(frame)
-    bc      = dataSet.get_bc(frame)
+    xyBc    = dataSet.get_xy_bc(f)
+    xyFluid = dataSet.get_xy_fluid(f)
 
     arrow_res = 2 if args.onlyBc else 8
 
@@ -175,8 +192,8 @@ for frame in range(predStart, predEnd):
       relErrULst.append(relErrU)
       relErrVLst.append(relErrV)
 
-    UT.save_image(predvelMag, 'predvels/raw', 'predvels_raw', frame)
-    UT.save_image(predPGrid, 'predvels/raw', 'predp_raw', frame)
+    UT.save_image(predvelMag, '{}/predvels/raw'.format(sourceName), 'predvels_raw', frame)
+    UT.save_image(predPGrid, '{}/predvels/raw'.format(sourceName), 'predp_raw', frame)
 
     if UT.PRINT_DEBUG:
       print('predvel u [{}, {}], v [{}, {}]'.format( \
@@ -184,16 +201,16 @@ for frame in range(predStart, predEnd):
             np.min(predvelGrid[:,:,1]), np.max(predvelGrid[:,:,1])))
       print('pred pressure [{}, {}]'.format(np.min(predPGrid[:,:]), np.max(predPGrid[:,:])))
 
-    UT.save_plot(predvelMag, 'predvels/plots', 'predvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax)
-    UT.save_plot(predPGrid, 'predvels/plots', 'predp_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(predvelMag, '{}/predvels/plots'.format(sourceName), 'predvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(predPGrid, '{}/predvels/plots'.format(sourceName), 'predp_plt', frame, size=size, cmin=cmin, cmax=cmax)
 
-    UT.save_velocity(predvelGrid, 'predvels/plots', 'velocity_stream', frame, size=size, type='stream', density=5.0)
-    UT.save_velocity(predvelGrid, 'predvels/plots', 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, cmin=cmin, cmax=cmax, filterZero=True)
+    UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')
+    UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, filterZero=True)
 
     if UT.FILE_IO:
       # Save predictions
       dictSave = {'velx': predvelGrid[:,:,0], 'vely': predvelGrid[:,:,1]}
-      UT.save_array_hdf5(arrays=dictSave, filePrefix='predVels', size=size, frame=frame)
+      UT.save_array_hdf5(arrays=dictSave, filePrefix='Pred_data_INS_Pool_Boiling', size=size, frame=frame)
 
       '''
       # Data can later be read and plotted like this:

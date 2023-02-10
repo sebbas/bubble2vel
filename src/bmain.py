@@ -81,6 +81,8 @@ parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
 
 parser.add_argument('-src', '--source', type=int, default=0,
                     help='type of training data source, either 1: experiment or 2: simulation')
+parser.add_argument('-rt', '--resetTime', default=False, action='store_true',
+                    help='start dataset time at zero')
 
 args = parser.parse_args()
 
@@ -91,7 +93,7 @@ assert args.file.endswith('.h5')
 dataSet = BD.BubbleDataSet(wallPoints=args.nWallPnt, \
                            colPoints=args.nColPoint, dataPoints=args.nDataPoint)
 dataSet.restore(args.file)
-dataSet.prepare_batch_arrays(zeroInitialCollocation=True)
+dataSet.prepare_batch_arrays(zeroInitialCollocation=True, resetTime=args.resetTime)
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 1)

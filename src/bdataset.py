@@ -832,9 +832,9 @@ class BubbleDataSet:
     UT.print_info('Selecting collocation points')
     rng = np.random.default_rng(2022)
 
-    # No collocation points supplied. Use half the number of data points
+    # No specific number of collocation points supplied in cmd-line args
     if default:
-      self.nColPnt = self.nDataPnt // 2
+      self.nColPnt = self.nDataPnt * 3
 
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
     # Update actual number of points

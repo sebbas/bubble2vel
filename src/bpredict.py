@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 
 ### Architecture
 parser.add_argument('-l', '--architecture', type=int, nargs='*',
-                    default=[100, 100, 100, 100, 50, 50, 50, 50],
+                    default=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150],
                     help='size of each hidden layer')
 
 # Regularizer coefficients

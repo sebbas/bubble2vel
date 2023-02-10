@@ -165,7 +165,7 @@ for f in range(0, numPredFrames):
     xyPred = xyBc if args.onlyBc else xyFluid
 
     # Only use points within boundaries
-    mask = dataSet.get_wall_mask(xyPred)
+    mask = dataSet.get_wall_mask(xyPred, useAll=True)
     xyMasked = xyPred[mask]
 
     cnt = 0

@@ -290,7 +290,7 @@ class BubbleDataSet:
       xyPred = self.get_xy_bc(f) if onlyBc else self.get_xy_fluid(f)
 
       # Only use points within boundaries
-      mask = self.get_wall_mask(xyPred)
+      mask = self.get_wall_mask(xyPred, useAll=True)
       xyPredMasked = xyPred[mask]
 
       nGridPnt = len(xyPredMasked)

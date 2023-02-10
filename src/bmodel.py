@@ -71,38 +71,29 @@ class BubblePINN(keras.Model):
       xy   = inputs[0]
       x, y = xy[:,0], xy[:,1]
 
+      # The dimensionless size of a single pixel and the domain
       pixelSize = UT.get_pixelsize_dimensionless(UT.worldSize_fx, UT.imageSize_fx, UT.L_fx)
-      size = pixelSize * (UT.imageSize_fx-1)
-      #tf.print(size)
+      domainSize = pixelSize * (UT.imageSize_fx-1)
 
-      walls = [1, 0, 1, 1] # Determines open or closed walls (left, top, right, bottom)
-      bWidth = pixelSize * 9
+      # Set how many pixels from border to use when filtering (left, top, right, bottom)
+      wallPixels = [20, 0, 20, 20]
+      filterSize = [pixelSize*pixelCnt for pixelCnt in wallPixels]
 
-      wallLeft   = y/size if walls[0] else 1
-      wallTop    = (size-y)/size if walls[1] else 1
-      wallRight  = (size-x)/size if walls[2] else 1
-      wallBottom = x/size if walls[3] else 1
+      facLeft   = tf.clip_by_value(y/filterSize[0], 0, 1) if filterSize[0] else 1
+      facTop    = tf.clip_by_value((domainSize-y)/filterSize[1], 0, 1) if filterSize[1] else 1
+      facRight  = tf.clip_by_value((domainSize-x)/filterSize[2], 0, 1) if filterSize[2] else 1
+      facBottom = tf.clip_by_value(x/filterSize[3], 0, 1) if filterSize[3] else 1
 
-      # Function d filters network effect at bottom border
-      d = tf.expand_dims(wallLeft*wallTop*wallRight*wallBottom, axis=-1)
+      # Function d filters network effect near walls
+      leftBottom = tf.math.minimum(facLeft, facTop)
+      rightTop = tf.math.minimum(facRight, facBottom)
+      d = tf.expand_dims(tf.math.minimum(leftBottom, rightTop), axis=-1)
 
-      wallLeft   = y-bWidth if walls[0] else 1
-      wallTop    = size-y-bWidth if walls[1] else 1
-      wallRight  = size-x-bWidth if walls[2] else 1
-      wallBottom = x-bWidth if walls[3] else 1
-
-      wallLeft = tf.cast(tf.math.greater(wallLeft, 0), tf.float32)
-      wallTop = tf.cast(tf.math.greater(wallTop, 0), tf.float32)
-      wallRight = tf.cast(tf.math.greater(wallRight, 0), tf.float32)
-      wallBottom = tf.cast(tf.math.greater(wallBottom, 0), tf.float32)
-
-      # Function g sets a no-slip boundary condition in wall points
-      g     = tf.expand_dims(wallLeft*wallTop*wallRight*wallBottom, axis=-1)
       omitPBc = 1
       if omitPBc:
         uv, p = uvp[:,:2], uvp[:,2]
         p     = tf.expand_dims(p, axis=-1)
-        uv    = g * uv
+        uv    = d * uv
         uvp   = tf.concat([uv, p], axis=-1)
       else:
         uvp   = g * uvp

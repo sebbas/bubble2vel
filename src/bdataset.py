@@ -864,7 +864,7 @@ class BubbleDataSet:
       uvpFluidFrameMasked = uvpFluidFrame[mask]
 
       # Only use points within boundaries
-      mask = self.get_wall_mask(xyFluidFrameMasked)
+      mask = self.get_wall_mask(xyFluidFrameMasked, useAll=True) # TODO: make useAll optional when using soft BCs
       xyFluidFrameMasked = xyFluidFrameMasked[mask]
       uvpFluidFrameMasked = uvpFluidFrameMasked[mask]
 

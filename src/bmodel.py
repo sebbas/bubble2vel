@@ -59,12 +59,47 @@ class BModel(keras.Model):
     self.validStat = {}
 
 
-  def call(self, inputs):
+  def call(self, inputs, training=False):
     '''
-    inputs: [xy, t]
+    inputs: [xy, t, uvp]
     '''
-    xyt = tf.concat([inputs[0], inputs[1]], axis=-1)
+    xy = inputs[0]
+    t = inputs[1]
+    xyt = tf.concat([xy, t], axis=-1)
     uvp = self.mlp(xyt)
+    bcUvp = inputs[2]
+
+    initCond = 0
+    omitP = 1 # TODO: Must be enabled for now
+    if initCond:
+      select = tf.cast(tf.math.equal(t, 0), tf.float32)
+      remove = tf.cast(tf.math.not_equal(t, 0), tf.float32)
+      if omitP:
+        uv, p = uvp[:,:2], uvp[:,2]
+        bcUv, bcP = bcUvp[:,:2], bcUvp[:,2]
+        p        = tf.expand_dims(p, axis=-1)
+        uv = bcUvp[:,:2] * select + uv[:,:2] * remove 
+        uvp   = tf.concat([uv, p], axis=-1)
+
+      '''
+      colMask = tf.cast(tf.math.equal(w, 0), tf.float32)
+
+      bcUv, bcP = bcUvp[:,:2], bcUvp[:,2]
+      bcMask = tf.cast(tf.math.less(d, 1), tf.float32)
+      g = bcUvp * bcMask
+      if omitPBc:
+        g = g[:,:2]
+
+      omitP = 0
+      if omitP:
+        uv, p = uvp[:,:2], uvp[:,2]
+        p     = tf.expand_dims(p, axis=-1)
+        uv    = g + d * uv
+        #tf.print(uv.shape, summarize=64)
+        uvp   = tf.concat([uv, p], axis=-1)
+      else:
+        uvp = g + d * uvp
+      '''
 
     filter = 0
     if filter:
@@ -76,27 +111,43 @@ class BModel(keras.Model):
       domainSize = pixelSize * (UT.imageSize_fx-1)
 
       # Set how many pixels from border to use when filtering (left, top, right, bottom)
-      wallPixels = [20, 0, 20, 20]
+      wallPixels = [1, 0, 1, 1]
       filterSize = [pixelSize*pixelCnt for pixelCnt in wallPixels]
 
       facLeft   = tf.clip_by_value(y/filterSize[0], 0, 1) if filterSize[0] else 1
       facTop    = tf.clip_by_value((domainSize-y)/filterSize[1], 0, 1) if filterSize[1] else 1
       facRight  = tf.clip_by_value((domainSize-x)/filterSize[2], 0, 1) if filterSize[2] else 1
       facBottom = tf.clip_by_value(x/filterSize[3], 0, 1) if filterSize[3] else 1
+      #tf.print(facBottom, summarize=100)
 
       # Function d filters network effect near walls
       leftBottom = tf.math.minimum(facLeft, facTop)
       rightTop = tf.math.minimum(facRight, facBottom)
       d = tf.expand_dims(tf.math.minimum(leftBottom, rightTop), axis=-1)
+      #d += 1e-10 # Avoid zero factors
 
       omitPBc = 1
+      # Function g contains exact data from boundary cells
+      g = 0
+      if 1: #training:
+        #bcUvp = inputs[2]
+        bcUv, bcP = bcUvp[:,:2], bcUvp[:,2]
+        bcMask = tf.cast(tf.math.less(d, 1), tf.float32) # 1s in walls, 0s in fluid
+        fluidMask = tf.cast(tf.math.greater_equal(d, 1), tf.float32) # 0s in walls, 1s in fluid
+        #tf.print(d, summarize=64)
+        g = bcUvp * bcMask
+        if omitPBc:
+          g = g[:,:2]
+        #tf.print(g, summarize=64)
+
       if omitPBc:
         uv, p = uvp[:,:2], uvp[:,2]
         p     = tf.expand_dims(p, axis=-1)
-        uv    = d * uv
+        uv    = g + fluidMask * uv
+        #tf.print(uv.shape, summarize=64)
         uvp   = tf.concat([uv, p], axis=-1)
       else:
-        uvp   = g * uvp
+        uvp   = g + d * uvp
 
     return uvp
 
@@ -125,7 +176,7 @@ class BModel(keras.Model):
       with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape1:
         tape1.watch(xy)
         tape1.watch(t)
-        uvpPred = self([xy, t])
+        uvpPred = self([xy, t, uv], training=True)
         uPred   = uvpPred[:,0]
         vPred   = uvpPred[:,1]
         pPred   = uvpPred[:,2]

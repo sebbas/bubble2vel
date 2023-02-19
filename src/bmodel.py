@@ -201,20 +201,66 @@ class BModel(keras.Model):
     w = tf.squeeze(w)
     dataMask = tf.cast(tf.equal(w, 1), tf.float32)
     nDataPoint = tf.reduce_sum(dataMask) + 1.0e-10
-    uMse  = tf.reduce_sum(tf.square(uv[:,0] - uPred) * dataMask) / nDataPoint
-    vMse  = tf.reduce_sum(tf.square(uv[:,1] - vPred) * dataMask) / nDataPoint
-    pMse  = tf.reduce_sum(tf.square(uv[:,2] - pPred) * dataMask) / nDataPoint
+    uMse = tf.reduce_sum(tf.square(uv[:,0] - uPred) * dataMask) / nDataPoint
+    vMse = tf.reduce_sum(tf.square(uv[:,1] - vPred) * dataMask) / nDataPoint
+    pMse = tf.reduce_sum(tf.square(uv[:,2] - pPred) * dataMask) / nDataPoint
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
-    colMask = tf.cast(tf.equal(w, 0), tf.float32)
-    nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
     pdeTrue = 0.0
+    Re      = self.Re
     pde0    = u_x + v_y
-    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/self.Re)*(u_xx + u_yy)
-    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/self.Re)*(v_xx + v_yy)
-    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
-    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
-    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
+    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
+    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
+
+    if 0:
+      # tInit: The timestamp (dimensionless number after zero-mean shift) where the initial condition is taken from
+      tInit = 0.0
+      isInitCond  = tf.cast(tf.math.equal(t, tInit), tf.float32)
+      notInitCond = tf.cast(tf.math.not_equal(t, tInit), tf.float32)
+
+      #isColInit      = tf.cast(tf.math.logical_and(isInitCond, colMask), tf.float32)
+      nPdePoint = tf.reduce_sum(colMask * notInitCond) + 1.0e-10
+      nInitCondPoint = tf.reduce_sum(colMask * isInitCond) + 1.0e-10
+
+      #tf.print(nPdePoint, summarize=64)
+      #a = tf.reduce_sum(colMask * notInitCond)
+      #tf.print(tf.math.equal(nPdePoint, a))
+      pdeMse0  = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask * notInitCond) / nPdePoint
+      pdeMse1  = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask * notInitCond) / nPdePoint
+      pdeMse2  = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask * notInitCond) / nPdePoint
+      #tf.print(tf.reduce_sum(colMask * notInitCond))
+      uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * colMask * isInitCond) / nInitCondPoint
+      vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * colMask * isInitCond) / nInitCondPoint
+      pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * colMask * isInitCond) / nInitCondPoint
+
+
+    # Compute initial condition loss
+    if 0:
+      # Add initial condition loss to data loss (it's using the collocation points but with MSE)
+      initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
+      nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
+      uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * initCondMask) / nInitCondPoint
+      vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * initCondMask) / nInitCondPoint
+      pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * initCondMask) / nInitCondPoint
+
+    # Compute informed collocation loss
+    if 0:
+      # Add initial condition loss to data loss (it's using the collocation points but with MSE)
+      colDataMask = tf.cast(tf.equal(w, 4), tf.float32)
+      nColDataPoint = tf.reduce_sum(colDataMask) + 1.0e-10
+      uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * colDataMask) / nColDataPoint
+      vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * colDataMask) / nColDataPoint
+      pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * colDataMask) / nColDataPoint
+
+    # Compute PDE loss
+    if 1:
+      #phi = tf.squeeze(phi)
+      #phiInv = 1 / tf.abs(phi)
+      colMask = tf.cast(tf.equal(w, 0), tf.float32)
+      nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
+      pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
+      pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
+      pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
 
     # Compute domain wall loss
     wallMask = tf.cast(tf.equal(w, 2), tf.float32)

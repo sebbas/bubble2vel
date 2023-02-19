@@ -16,11 +16,11 @@ import butils as UT
 strategy = tf.distribute.MirroredStrategy()
 '''
 
-class BubblePINN(keras.Model):
+class BModel(keras.Model):
   def __init__(self, width=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 3],\
                alpha=[1.0, 1.0, 0.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0],\
                reg=None, saveGradStat=False, Re=3.5e4, **kwargs):
-    super(BubblePINN, self).__init__(**kwargs)
+    super(BModel, self).__init__(**kwargs)
     print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \
           alpha, beta, gamma, Re))
 

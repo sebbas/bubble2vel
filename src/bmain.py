@@ -133,7 +133,7 @@ if args.name is None:
 modelName = nameStr + archStr + paramsStr
 
 #with BM.strategy.scope():
-bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg,
+bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                           alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
                           Re=UT.get_reynolds_number(args.source))
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))

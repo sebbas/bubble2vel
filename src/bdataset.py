@@ -1183,6 +1183,12 @@ class BubbleDataSet:
     return self.xyFluid[s:e, ...]
 
 
+  def get_xy_walls(self, f):
+    s = sum(self.nWalls[:f])
+    e = s + self.nWalls[f]
+    return self.xyDomain[s:e, ...]
+
+
   def get_bc(self, f):
     s = sum(self.nBcBubble[:f])
     e = s + self.nBcBubble[f]
@@ -1193,12 +1199,6 @@ class BubbleDataSet:
     s = sum(self.nFluid[:f])
     e = s + self.nFluid[f]
     return self.uvpFluid[s:e, ...]
-
-
-  def get_xy_walls(self, f):
-    s = sum(self.nWalls[:f])
-    e = s + self.nWalls[f]
-    return self.xyDomain[s:e, ...]
 
 
   def get_bc_walls(self, f):

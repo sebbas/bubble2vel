@@ -12,7 +12,7 @@ parser.add_argument('-s', '--startFrame', type=int, default=0,
 parser.add_argument('-e', '--endFrame', type=int, default=399,
                     help='last frame to load from dataset')
 parser.add_argument('-w', '--walls', type=int, nargs=4, default=[1,1,1,1],
-                    help='domain walls, [top, right, bottom, left]')
+                    help='domain boundary condition sampling width [left, top, right, bottom]')
 parser.add_argument('-i', '--interface', type=int, default=1,
                     help='thickness of bubble liquid interface in pixels')
 parser.add_argument('-src', '--source', type=int, default=0,
@@ -41,7 +41,7 @@ isLoaded, filePrefix = dataSet.load_data(args.source)
 if not isLoaded: sys.exit()
 
 # Extract points from dataset and store in h5
-dataSet.extract_wall_points()
+dataSet.extract_wall_points(useDataBc=True)
 dataSet.extract_fluid_points(velEps=1.0)
 dataSet.save(filePrefix=filePrefix)
 dataSet.summary()

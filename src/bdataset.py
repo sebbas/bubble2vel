@@ -443,62 +443,112 @@ class BubbleDataSet:
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 
-      bcLst = []
+      hasLeftWall   = self.walls[0] > 0
+      hasTopWall    = self.walls[1] > 0
+      hasRightWall  = self.walls[2] > 0
+      hasBottomWall = self.walls[3] > 0
+
+      # Boundary width position offset, bwidth=1 => 0 offset (therefore the -1)
+      bWLeft   = self.walls[0]-1 if self.walls[0] else 0
+      bWTop    = self.walls[1]-1 if self.walls[1] else 0
+      bWRight  = self.walls[2]-1 if self.walls[2] else 0
+      bWBottom = self.walls[3]-1 if self.walls[3] else 0
+
+      assert bWLeft >= 0 and bWTop >= 0 and bWRight >= 0 and bWBottom >= 0, 'Wall position out scope, cannot be negative'
+
+      # Zero boundary condition
+      uvpZero = [0, 0, 0]
+
+      # xyt positions, using origin 'lower' (x from left to right, y from bottom to top)
       xyLst = []
+      cellCnt = 0
 
-      # Boundary width
-      bWTop    = self.walls[0]-1 if self.walls[0] else 0
-      bWRight  = self.walls[1]-1 if self.walls[1] else 0
-      bWBottom = self.walls[2]-1 if self.walls[2] else 0
-      bWLeft   = self.walls[3]-1 if self.walls[3] else 0
-
-      # Boundary condition
-      bCTop, bCRight, bCBottom, bCLeft = [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]
-
-      # Using origin 'lower' (x from left to right, y from bottom to top)
+      # Walls:
       # Left domain wall
-      if self.walls[0] > 0:
-        numCells = sizeY - bWLeft - bWRight
-        x = np.full((numCells,), bWTop, dtype=float)
-        y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)
+      for i in range(self.walls[0]):
+        numCells = sizeY - bWBottom - bWTop - 2 # -2 to exclude corners
+        x = np.full((numCells,), bWLeft-i, dtype=float)
+        y = np.linspace(bWBottom+1, sizeY-1-bWTop-1, num=numCells, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
-        bcLst.extend(np.tile(bCTop, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
+        cellCnt += numCells
 
       # Top domain wall
-      if self.walls[1] > 0:
-        numCells = sizeX - bWTop - bWBottom
-        x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)
-        y = np.full((numCells,), sizeX-1-bWRight, dtype=float)
+      for i in range(self.walls[1]):
+        numCells = sizeX - bWLeft - bWRight -2
+        x = np.linspace(bWLeft+1, sizeX-1-bWRight-1, num=numCells, dtype=float)
+        y = np.full((numCells,), sizeY-1-bWTop+i, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
-        bcLst.extend(np.tile(bCRight, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
+        cellCnt += numCells
 
       # Right domain wall
-      if self.walls[2] > 0:
-        numCells = sizeY - bWLeft - bWRight
-        x = np.full((numCells,), sizeY-1-bWBottom, dtype=float)
-        y = np.linspace(bWLeft, sizeY-1-bWRight, num=numCells, dtype=float)[::-1]
+      for i in range(self.walls[2]):
+        numCells = sizeY - bWTop - bWBottom - 2
+        x = np.full((numCells,), sizeX-1-bWRight+i, dtype=float)
+        y = np.linspace(sizeY-1-bWTop-1, bWBottom+1, num=numCells, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
-        bcLst.extend(np.tile(bCBottom, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
+        cellCnt += numCells
 
       # Bottom domain wall
-      if self.walls[3] > 0:
-        numCells = sizeX - bWTop - bWBottom
-        x = np.linspace(bWTop, sizeX-1-bWBottom, num=numCells, dtype=float)[::-1]
-        y = np.full((numCells,), bWLeft, dtype=float)
+      for i in range(self.walls[3]):
+        numCells = sizeX - bWRight - bWLeft - 2
+        x = np.linspace(sizeY-1-bWRight-1, bWLeft+1, num=numCells, dtype=float)
+        y = np.full((numCells,), bWBottom-i, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
-        bcLst.extend(np.tile(bCLeft, (numCells, 1)))
         xyLst.extend(list(zip(x,y,t)))
+        cellCnt += numCells
 
-      # Using boundary value from dataset instead
+      # Corners:
+      # Top left corner
+      if hasLeftWall or hasTopWall:
+        acc = []
+        for i in range(0, max(1, self.walls[0])): # left
+          for j in range(min(sizeY-self.walls[1], sizeY-1), sizeY): # top
+            acc.append((i,j,frame))
+            cellCnt += 1
+        xyLst.extend(acc)
+
+      # Top right corner
+      if hasRightWall or hasTopWall:
+        acc = []
+        for i in range(min(sizeX-self.walls[2], sizeX-1), sizeX): # right
+          for j in range(min(sizeY-self.walls[1], sizeY-1), sizeY): # top
+            acc.append((i,j,frame))
+            cellCnt += 1
+        xyLst.extend(acc)
+
+      # Bottom left corner
+      if hasLeftWall or hasBottomWall:
+        acc = []
+        for i in range(0, max(1, self.walls[0])): # left
+          for j in range(0, max(1, self.walls[3])): # bottom
+            acc.append((i,j,frame))
+            cellCnt += 1
+        xyLst.extend(acc)
+
+      # Bottom right corner
+      if hasRightWall or hasBottomWall:
+        acc = []
+        for i in range(min(sizeX-self.walls[2], sizeX-1), sizeX): # right
+          for j in range(0, max(1, self.walls[3])): # bottom
+            acc.append((i,j,frame))
+            cellCnt += 1
+        xyLst.extend(acc)
+
+      # uvp labels
+      bcLst = []
+
+      # Using actual boundary values from dataset for wall uvp
       if useDataBc:
-        bcLst = [] # Override bc list and copy value from dataset
+         # Override bc list and copy value from dataset
         for i, j, _ in xyLst:
-          i, j = int(i), int(j)
-          curUvp = self.vel[f,i,j,:]
+          xi, yi = int(i), int(j)
+          curUvp = self.vel[f,yi,xi,:]
           bcLst.append(curUvp)
+      else:
+        bcLst.extend(np.tile(uvpZero, (cellCnt, 1)))
 
       bcFrameLst.append(bcLst)
       xyFrameLst.append(xyLst)

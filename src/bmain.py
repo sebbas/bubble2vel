@@ -100,7 +100,7 @@ args.architecture.append(UT.nDim + 1)
 
 # Create training and validation (data + collocation points)
 nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()
-nTrain   = int(nSamples * 0.9)
+nTrain   = int(nSamples * 0.85)
 # Ensure training samples fit evenly
 nTrain   = args.batchSize * round(nTrain / args.batchSize)
 nValid   = nSamples - nTrain

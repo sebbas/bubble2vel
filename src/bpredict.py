@@ -23,8 +23,8 @@ parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
                     help='l2 regularization')
 
 # Plotting options
-parser.add_argument('-b', '--onlyBc', default=False, action='store_true',
-                    help='plot prediction velocities only at data point positions')
+parser.add_argument('-xy', '--xyPred', type=int, nargs=3, default=[1, 1, 1],
+                    help='predict uvp at wall, fluid, and/or data points')
 
 # Model being used for predictions
 parser.add_argument('-n', '--name', default=None,
@@ -57,7 +57,8 @@ source                 = dataSet.get_source()
 sourceName             = dataSet.get_source_name()
 numPredFrames          = args.predFrames
 startFrame, endFrame   = args.startFrame, args.endFrame
-cmin, cmax             = 0.0, 15.0
+cmin, cmax             = 0.0, 3.0
+cmap                   = 'jet'
 relErrULst, relErrVLst = [], []
 
 assert source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
@@ -67,7 +68,7 @@ if source == UT.SRC_FLASHX:
   worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
 # Generators
-predGen = dataSet.generate_predict_pts(0, numPredFrames, worldSize, imageSize, fps, L, T, onlyBc=args.onlyBc)
+predGen = dataSet.generate_predict_pts(0, numPredFrames, worldSize, imageSize, fps, L, T, xyPred=args.xyPred, resetTime=True, zeroMean=False)
 uvpPred = bubbleNet.predict(predGen)
 predVels = uvpPred[:, :UT.nDim]
 predP = copy.deepcopy(uvpPred[:, 2])
@@ -102,35 +103,32 @@ for f in range(0, numPredFrames):
 
   plotOrig = True
   if plotOrig:
-    xyBc     = dataSet.get_xy_bc(f)
-    xyFluid  = dataSet.get_xy_fluid(f)
-    uvp      = dataSet.get_bc(f)
+    uvpData  = dataSet.get_bc(f)
+    xytData  = dataSet.get_xy_bc(f)
     uvpFluid = dataSet.get_uvp_fluid(f)
+    xytFluid = dataSet.get_xy_fluid(f)
+    uvpWalls = dataSet.get_bc_walls(f)
+    xytWalls = dataSet.get_xy_walls(f)
 
-    arrow_res = 2 if args.onlyBc else 8
+    # Get ground truth xyt and uvp of data, collocation, and / or wall points
+    xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 1))
+    if args.xyPred[0]:
+      xytOrig = np.concatenate((xytOrig, xytData))
+      uvpOrig = np.concatenate((uvpOrig, uvpData))
+    if args.xyPred[1]:
+      xytOrig = np.concatenate((xytOrig, xytFluid))
+      uvpOrig = np.concatenate((uvpOrig, uvpFluid))
+    if args.xyPred[2]:
+      xytOrig = np.concatenate((xytOrig, xytWalls))
+      uvpOrig = np.concatenate((uvpOrig, uvpWalls))
+
+    # Use coarser plot when plotting collocation points
+    arrow_res = 2 if not args.xyPred[1] else 8
 
     origvelGrid = np.zeros((size[0], size[1], UT.nDim + 1))
     origvelMag  = np.zeros((size))
 
-    '''
-    # Plot everything
-    xyOrig = np.concatenate((xyBc, xyFluid))
-    uvpOrig = np.concatenate((uvp, uvpFluid))
-    for xyt, uvp in zip(xyOrig, uvpOrig):
-      xi, yi = int(xyt[0]), int(xyt[1])
-      origvelMag[yi, xi] = np.sqrt(np.square(uvp[0]) + np.square(uvp[1]))
-      origvelGrid[yi, xi] = uvp[:]
-    UT.save_plot(origvelGrid[:,:,2], '{}/origvels/plots'.format(sourceName), 'origphi_plt', frame, size=size, cmin=-1.0, cmax=1.0, cmap='jet')
-    '''
-
-    xyOrig = xyBc if args.onlyBc else xyFluid
-    uvpOrig = uvp if args.onlyBc else uvpFluid
-
-    # Only use points within boundaries
-    mask = dataSet.get_wall_mask(xyOrig, useAll=True)
-    xyMasked = xyOrig[mask]
-    uvpMasked = uvpOrig[mask]
-    for xyt, uvp in zip(xyMasked, uvpMasked):
+    for xyt, uvp in zip(xytOrig, uvpOrig):
       xi, yi = int(xyt[0]), int(xyt[1])
       origvelMag[yi, xi] = np.sqrt(np.square(uvp[0]) + np.square(uvp[1]))
       origvelGrid[yi, xi] = uvp[:]
@@ -144,7 +142,7 @@ for f in range(0, numPredFrames):
             np.min(origvelGrid[:,:,0]), np.max(origvelGrid[:,:,0]), \
             np.min(origvelGrid[:,:,1]), np.max(origvelGrid[:,:,1])))
 
-    UT.save_plot(origvelMag, '{}/origvels/plots'.format(sourceName), 'origvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(origvelMag, '{}/origvels/plots'.format(sourceName), 'origvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax, cmap=cmap)
     UT.save_plot(origvelGrid[:,:,2], '{}/origvels/plots'.format(sourceName), 'origphi_plt', frame, size=size, cmin=-1.0, cmax=1.0, cmap='jet')
 
     UT.save_velocity(origvelGrid, '{}/origvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')
@@ -153,23 +151,13 @@ for f in range(0, numPredFrames):
   ### Prediction vel plots
 
   if predVels is not None:
-    xyBc    = dataSet.get_xy_bc(f)
-    xyFluid = dataSet.get_xy_fluid(f)
-
-    arrow_res = 2 if args.onlyBc else 8
 
     predvelGrid = np.zeros((size[0], size[1], UT.nDim))
     predvelMag  = np.zeros((size))
     predPGrid   = np.zeros((size))
 
-    xyPred = xyBc if args.onlyBc else xyFluid
-
-    # Only use points within boundaries
-    mask = dataSet.get_wall_mask(xyPred, useAll=True)
-    xyMasked = xyPred[mask]
-
     cnt = 0
-    for xyt in xyMasked:
+    for xyt in xytOrig:
       xi, yi = int(xyt[0]), int(xyt[1])
       i, j = xi, yi
       vel = predVels[cnt + predVelOffset, :UT.nDim]
@@ -199,9 +187,10 @@ for f in range(0, numPredFrames):
       print('predvel u [{}, {}], v [{}, {}]'.format( \
             np.min(predvelGrid[:,:,0]), np.max(predvelGrid[:,:,0]), \
             np.min(predvelGrid[:,:,1]), np.max(predvelGrid[:,:,1])))
+      print('pred velmag [{}, {}]'.format(np.min(predvelMag[:,:]), np.max(predvelMag[:,:])))
       print('pred pressure [{}, {}]'.format(np.min(predPGrid[:,:]), np.max(predPGrid[:,:])))
 
-    UT.save_plot(predvelMag, '{}/predvels/plots'.format(sourceName), 'predvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(predvelMag, '{}/predvels/plots'.format(sourceName), 'predvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax, cmap=cmap)
     UT.save_plot(predPGrid, '{}/predvels/plots'.format(sourceName), 'predp_plt', frame, size=size, cmin=cmin, cmax=cmax)
 
     UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')

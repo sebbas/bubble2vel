@@ -283,28 +283,67 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, onlyBc=False):
+  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, xyPred=[1,1,1], resetTime=True, zeroMean=True):
     print('Generating prediction points')
 
     for f in range(begin, end):
-      xyPred = self.get_xy_bc(f) if onlyBc else self.get_xy_fluid(f)
+      uvpData  = self.get_bc(f)
+      xytData  = self.get_xy_bc(f)
+      uvpFluid = self.get_uvp_fluid(f)
+      xytFluid = self.get_xy_fluid(f)
+      uvpWalls = self.get_bc_walls(f)
+      xytWalls = self.get_xy_walls(f)
+
+      # Get ground truth xyt and uvp of data, collocation, and / or wall points
+      xytTarget, uvpTarget = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1))
+      print(xytData.shape)
+      if xyPred[0]:
+        xytTarget = np.concatenate((xytTarget, xytData))
+        uvpTarget = np.concatenate((uvpTarget, uvpData))
+      if xyPred[1]:
+        xytTarget = np.concatenate((xytTarget, xytFluid))
+        uvpTarget = np.concatenate((uvpTarget, uvpFluid))
+      if xyPred[2]:
+        xytTarget = np.concatenate((xytTarget, xytWalls))
+        uvpTarget = np.concatenate((uvpTarget, uvpWalls))
 
       # Only use points within boundaries
-      mask = self.get_wall_mask(xyPred, useAll=True)
-      xyPredMasked = xyPred[mask]
+      mask = self.get_wall_mask(xytTarget, useAll=True)
+      xytTargetMasked = xytTarget[mask]
+      uvpTargetMasked = uvpTarget[mask]
 
-      nGridPnt = len(xyPredMasked)
+      nGridPnt = len(xytTargetMasked)
 
       # Arrays to store batches
       xy    = np.zeros((nGridPnt, self.dim), dtype=float)
       t     = np.zeros((nGridPnt, 1), dtype=float)
       # Dummies, unused for pred pts
-      label = np.zeros((nGridPnt, self.dim),  dtype=float)
+      label = np.zeros((nGridPnt, self.dim + 1),  dtype=float)
       w     = np.zeros((nGridPnt, 1),         dtype=float)
 
       # Fill batch arrays
-      xy[:, :] = xyPredMasked[:, :self.dim]
-      t[:, 0]  = xyPredMasked[:, self.dim]
+      xy[:, :] = xytTargetMasked[:, :self.dim]
+      t[:, 0]  = xytTargetMasked[:, self.dim]
+      label[:, :] = uvpTargetMasked[:, :]
+
+      # Shift time range to start at zero
+      if resetTime:
+        print('min, max xyt[0]: [{}, {}]'.format(np.min(t[:,0]), np.max(t[:,0])))
+        t[:,0] -= self.startFrame
+        if UT.PRINT_DEBUG:
+          print(self.startFrame)
+
+      # Zero mean for time range (use -1 to account for 0 in center)
+      if zeroMean:
+        print(self.nTotalFrames)
+        xy[:,0] -= (self.size[0]-1) / 2
+        xy[:,1] -= (self.size[1]-1) / 2
+        #t[:,0]  -= (self.nTotalFrames-1) / 2
+
+        if UT.PRINT_DEBUG:
+          print('min, max xyt[0]: [{}, {}]'.format(np.min(t[:,0]), np.max(t[:,0])))
+          print('min, max xyt[1]: [{}, {}]'.format(np.min(xy[:,0]), np.max(xy[:,0])))
+          print('min, max xyt[2]: [{}, {}]'.format(np.min(xy[:,1]), np.max(xy[:,1])))
 
       # Convert from domain space to world space
       pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
@@ -314,24 +353,24 @@ class BubbleDataSet:
       pos  = UT.pos_world_to_dimensionless(pos, L)
       time = UT.time_world_to_dimensionless(time, T)
 
-      yield [pos, time, w], label
+      yield [pos, time, label]
 
 
-  def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=False):
+  def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=True, zeroMean=True):
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
 
     # Extract selection of data points (otherwise use all)
     useAllDataPts = (self.nDataPnt < 0)
-    self.select_data_points(useAllDataPts, resetTime)
+    self.select_data_points(useAllDataPts)
 
     # Extract selection of collocation points
     useDefaultColPts = (self.nColPnt < 0)
-    self.select_collocation_points(useDefaultColPts, resetTime)
+    self.select_collocation_points(useDefaultColPts)
 
     # Extract selection of wall points (otherwise use all)
     useAllWallPts = (self.nWallPnt < 0)
-    self.select_wall_points(useAllWallPts, resetTime)
+    self.select_wall_points(useAllWallPts)
 
     # TODO: Add option to use old collocation point label init
     if 0:
@@ -365,6 +404,39 @@ class BubbleDataSet:
     self.labels = uvpSamples[perm]
     self.xyt    = xytSamples[perm]
     self.id     = idSamples[perm]
+
+    # Shift time range to start at zero
+    if resetTime:
+      self.xyt[:,2] -= self.startFrame
+
+    # Zero mean for pos range (use -1 to account for 0 in center)
+    if zeroMean:
+      self.xyt[:,0] -= (self.size[0]-1) / 2
+      self.xyt[:,1] -= (self.size[1]-1) / 2
+      #self.xyt[:,2] -= (self.nTotalFrames-1) / 2
+
+      print('min, max xyt[0]: [{}, {}]'.format(np.min(self.xyt[:,0]), np.max(self.xyt[:,0])))
+      print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xyt[:,1]), np.max(self.xyt[:,1])))
+      print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xyt[:,2]), np.max(self.xyt[:,2])))
+
+    initialCond = 0
+    # Use the collocation points at the initial timestamp to set initial condition
+    if initialCond:
+      tInit   = np.min(self.xyt[:,2])         # Use min timestamp as the initial time
+      isTInit = (self.xyt[:,2] == tInit)      # Select all t's at initial time
+      isCol   = (self.id[:,0] == 0)           # Select all collocation points
+      isInit = np.logical_and(isTInit, isCol) # The initial condition points are here
+      self.id[isInit] = 3                     # Assign new id to these points
+
+    dataColPts = 0
+    if dataColPts:
+      indices = np.arange(0, self.xyCol.shape[0])
+      nTakeCol = int(self.nColPnt * 0.5)
+      randIndices = rng.choice(indices, size=nTakeCol, replace=False)
+      self.id[randIndices] = 4
+
+      if UT.IMG_DEBUG:
+        UT.save_array(self.xyCol[randIndices, :], '{}/collocation'.format(self.sourceName), 'colptslabelled_select', 30, self.size)
 
     assert len(self.labels) == len(self.xyt)
     assert len(self.labels) == len(self.id)
@@ -421,7 +493,7 @@ class BubbleDataSet:
         vel = UT.vel_domain_to_world(uv, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
 
-      yield [pos, time, id, phi], vel
+      yield [pos, time, vel, id, phi]
 
 
   # Define domain border locations + attach bc
@@ -823,15 +895,13 @@ class BubbleDataSet:
       UT.save_velocity_bins(self.bc[:, 1], '{}/histograms'.format(self.sourceName), 'bc_y_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
 
 
-  def select_data_points(self, all=False, resetTime=False):
+  def select_data_points(self, all=False):
     UT.print_info('Selecting data points')
     rng = np.random.default_rng(2022)
 
     # Use all points that are available
     if all:
       self.xyData = copy.deepcopy(self.xyBc)
-      if resetTime:
-        self.xyData[:,2] -= self.startFrame
       self.uvData = copy.deepcopy(self.bc)
 
       # Only use points within boundaries
@@ -879,11 +949,8 @@ class BubbleDataSet:
         UT.save_array(self.xyData[s:e, :], '{}/data'.format(self.sourceName), 'datapts_select', frame, self.size)
       s = e
 
-    if resetTime:
-      self.xyData[:,2] -= self.startFrame
 
-
-  def select_collocation_points(self, default=False, resetTime=False):
+  def select_collocation_points(self, default=False):
     UT.print_info('Selecting collocation points')
     rng = np.random.default_rng(2022)
 
@@ -936,19 +1003,14 @@ class BubbleDataSet:
       if UT.IMG_DEBUG:
         UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/collocation'.format(self.sourceName), 'colpts_select', frame, self.size)
 
-    if resetTime:
-      self.xyCol[:,2] -= self.startFrame
 
-
-  def select_wall_points(self, all=False, resetTime=False):
+  def select_wall_points(self, all=False):
     UT.print_info('Selecting wall points')
     rng = np.random.default_rng(2022)
 
     # Use all points that are available
     if all:
       self.xyWalls = copy.deepcopy(self.xyDomain)
-      if resetTime:
-        self.xyWalls[:,2] -= self.startFrame
       self.uvWalls = copy.deepcopy(self.bcDomain)
       self.nWallPnt = len(self.xyWalls)
       print('Using {} wall points'.format(self.nWallPnt))
@@ -989,9 +1051,6 @@ class BubbleDataSet:
 
       if UT.IMG_DEBUG:
         UT.save_array(xyWallsFrame[randIndices, :], '{}/wall'.format(self.sourceName), 'wallpts_select', frame, self.size)
-
-    if resetTime:
-      self.xyWalls[:,2] -= self.startFrame
 
 
   def save(self, dir='../data/', filePrefix='bdata'):

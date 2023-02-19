@@ -171,15 +171,16 @@ class BModel(keras.Model):
     uMseWalls = tf.reduce_sum(tf.square(uv[:,0] - uPred) * wallMask) / nWallsPoint
     vMseWalls = tf.reduce_sum(tf.square(uv[:,1] - vPred) * wallMask) / nWallsPoint
     pMseWalls = tf.reduce_sum(tf.square(uv[:,2] - pPred) * wallMask) / nWallsPoint
+
     return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
 
 
   def train_step(self, data):
-    xy       = data[0][0]
-    t        = data[0][1]
-    w        = data[0][2]
-    phi      = data[0][3]
-    uv       = data[1]
+    xy  = data[0][0]
+    t   = data[0][1]
+    uv  = data[0][2]
+    w   = data[0][3]
+    phi = data[0][4]
 
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
@@ -246,11 +247,11 @@ class BModel(keras.Model):
 
 
   def test_step(self, data):
-    xy       = data[0][0]
-    t        = data[0][1]
-    w        = data[0][2]
-    phi      = data[0][3]
-    uv       = data[1]
+    xy  = data[0][0]
+    t   = data[0][1]
+    uv  = data[0][2]
+    w   = data[0][3]
+    phi = data[0][4]
 
     # Compute the data and pde losses
     uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \

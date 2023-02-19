@@ -889,7 +889,7 @@ class BubbleDataSet:
 
     # No specific number of collocation points supplied in cmd-line args
     if default:
-      self.nColPnt = self.nDataPnt * 3
+      self.nColPnt = self.nDataPnt * 10
 
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
     # Update actual number of points

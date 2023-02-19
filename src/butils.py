@@ -104,7 +104,7 @@ def save_video(subdir, name, imgDir, fps=5):
 
 
 def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
-                  type='stream', arrow_res=1, cmin=0.0, cmax=5.0, density=2.0, \
+                  type='stream', arrow_res=1, cmin=0.0, cmax=5.0, density=5.0, \
                   filterZero=False, cmap='jet'):
   fig, ax = plt.subplots(1, 1, figsize=(10,10))
   x = np.arange(0, int(size[0]), arrow_res)
@@ -116,10 +116,11 @@ def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
   axis = 'on'
   if type == 'stream':
     axis = 'off'
-    plot = ax.streamplot(X, Y, U, V, density=density, linewidth=1.0, color='white')#, color='#A23BEC')
+    plot = ax.streamplot(X, Y, U, V, density=4, linewidth=1.0, color='white')#, color='#A23BEC')
   elif type == 'quiver':
-    colorbar = True
+    colorbar = False
     transparentBg = False
+    axis = 'off'
     U = U[::arrow_res, ::arrow_res]
     V = V[::arrow_res, ::arrow_res]
     M = M[::arrow_res, ::arrow_res]
@@ -130,7 +131,8 @@ def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
       M = M[maskFilterZero]
       X = X[maskFilterZero]
       Y = Y[maskFilterZero]
-    plot = ax.quiver(X, Y, U, V, M, cmap='winter', scale_units = 'xy', angles='xy')
+    #plot = ax.quiver(X, Y, U, V, M, cmap='winter', scale_units = 'xy', angles='xy')
+    plot = ax.quiver(X, Y, U, V, cmap='winter', scale_units = 'xy', angles='xy', color='white')
   elif type == 'mag':
     colorbar = True
     cmin = np.min(M)

@@ -796,7 +796,6 @@ class BubbleDataSet:
         self._thicken_interface(self.interface, flags, intersection, curPhi, fromInside=False)
 
       if UT.IMG_DEBUG:
-        UT.save_image(1-flags, '{}/all'.format(self.sourceName), 'colpts_all', frame)
         UT.save_image(intersection, '{}/all'.format(self.sourceName), 'datapts_all', frame, i=self.interface)
         UT.save_image(mag, '{}/all'.format(self.sourceName), 'magnitude_all', frame)
         UT.save_image(curPhi, '{}/all'.format(self.sourceName), 'phi_all', frame, cmap='jet')
@@ -819,8 +818,13 @@ class BubbleDataSet:
       assert len(bcLst) == len(bubbleBorderIndices), 'Number of data point velocities must match number of indices'
 
       # Create fluid mask
-      fluidmask = 1 - flags
-      assert np.sum(fluidmask) == (sizeX*sizeY - np.sum(flags)), 'Fluid mask must match total size minus bubble mask'
+      exclude = flags
+      if self.source == UT.SRC_FLASHX:
+        exclude += intersection
+      fluidmask = 1 - exclude
+      if UT.IMG_DEBUG:
+        UT.save_image(fluidmask, '{}/all'.format(self.sourceName), 'colpts_all', frame)
+      assert np.sum(fluidmask) == (sizeX*sizeY - np.sum(exclude) ), 'Fluid mask must match total size minus bubble mask'
       nzIndices = np.nonzero(fluidmask)
       fluidIndices = list(zip(nzIndices[1], nzIndices[0])) # np.nonzero returns data in [rows, columns], ie [y,x]
       xyFluidFrameLst.append(fluidIndices)
@@ -986,7 +990,7 @@ class BubbleDataSet:
       uvpFluidFrameMasked = uvpFluidFrame[mask]
 
       # Only use points within boundaries
-      mask = self.get_wall_mask(xyFluidFrameMasked, useAll=True) # TODO: make useAll optional when using soft BCs
+      mask = self.get_wall_mask(xyFluidFrameMasked)
       xyFluidFrameMasked = xyFluidFrameMasked[mask]
       uvpFluidFrameMasked = uvpFluidFrameMasked[mask]
 

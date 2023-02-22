@@ -49,7 +49,7 @@ args.architecture.append(UT.nDim + 1)
 dataSet = BD.BubbleDataSet()
 dataSet.restore(args.file)
 
-bubbleNet = BM.BubblePINN(width=args.architecture, reg=args.reg)
+bubbleNet = BM.BModel(width=args.architecture, reg=args.reg)
 bubbleNet.load_weights(tf.train.latest_checkpoint(args.name)).expect_partial()
 
 size                   = dataSet.get_size()

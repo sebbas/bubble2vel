@@ -315,16 +315,14 @@ class BubbleDataSet:
       nGridPnt = len(xytTargetMasked)
 
       # Arrays to store batches
-      xy    = np.zeros((nGridPnt, self.dim), dtype=float)
-      t     = np.zeros((nGridPnt, 1), dtype=float)
-      # Dummies, unused for pred pts
-      label = np.zeros((nGridPnt, self.dim + 1),  dtype=float)
-      w     = np.zeros((nGridPnt, 1),         dtype=float)
+      xy = np.zeros((nGridPnt, self.dim),     dtype=float)
+      t  = np.zeros((nGridPnt, 1),            dtype=float)
+      uv = np.zeros((nGridPnt, self.dim + 1), dtype=float)
 
       # Fill batch arrays
       xy[:, :] = xytTargetMasked[:, :self.dim]
       t[:, 0]  = xytTargetMasked[:, self.dim]
-      label[:, :] = uvpTargetMasked[:, :]
+      uv[:, :] = uvpTargetMasked[:, :]
 
       # Shift time range to start at zero
       if resetTime:
@@ -353,7 +351,14 @@ class BubbleDataSet:
       pos  = UT.pos_world_to_dimensionless(pos, L)
       time = UT.time_world_to_dimensionless(time, T)
 
-      yield [pos, time, label]
+      # Only non-dimensionalize velocities from flownet dataset
+      vel = uv
+      if self.source == UT.SRC_FLOWNET:
+        vel = UT.vel_domain_to_world(uv, worldSize, fps)
+        vel = UT.vel_world_to_dimensionless(vel, V)
+
+      dummy = 0
+      yield [pos, time, vel], dummy
 
 
   def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=True, zeroMean=True):
@@ -493,7 +498,8 @@ class BubbleDataSet:
         vel = UT.vel_domain_to_world(uv, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
 
-      yield [pos, time, vel, id, phi]
+      dummy = 0
+      yield [pos, time, vel, id, phi], dummy
 
 
   # Define domain border locations + attach bc

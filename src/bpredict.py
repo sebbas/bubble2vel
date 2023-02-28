@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 import argparse
-import matplotlib.pyplot as plt
 import copy
 
 import bdataset as BD

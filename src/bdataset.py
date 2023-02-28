@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
 import h5py as h5
-import matplotlib.pyplot as plt
 import os.path
 import sys
 import copy
 import numpy as np
 import random as rn
-import tensorflow as tf
 import warnings
 try:
   import boxkit.api as boxkit

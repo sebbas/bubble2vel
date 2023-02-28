@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import h5py as h5
 import tensorflow as tf
 import numpy as np
 

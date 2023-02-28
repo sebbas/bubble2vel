@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 
-import sys
-sys.path.append('../src')
 import os
 import argparse
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import numpy as np
 import pandas as pd
 

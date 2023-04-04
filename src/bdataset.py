@@ -295,21 +295,24 @@ class BubbleDataSet:
       # Get ground truth xyt and uvp of data, collocation, and / or wall points
       xytTarget, uvpTarget = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1))
       if xyPred[0]:
-        xytTarget = np.concatenate((xytTarget, xytData))
-        uvpTarget = np.concatenate((uvpTarget, uvpData))
+        # Only use points within boundaries
+        mask = self.get_wall_mask(xytData)
+        xytDataMasked = xytData[mask]
+        uvpDataMasked = uvpData[mask]
+        xytTarget = np.concatenate((xytTarget, xytDataMasked))
+        uvpTarget = np.concatenate((uvpTarget, uvpDataMasked))
       if xyPred[1]:
-        xytTarget = np.concatenate((xytTarget, xytFluid))
-        uvpTarget = np.concatenate((uvpTarget, uvpFluid))
+        # Only use points within boundaries
+        mask = self.get_wall_mask(xytFluid)
+        xytFluidMasked = xytFluid[mask]
+        uvpFluidMasked = uvpFluid[mask]
+        xytTarget = np.concatenate((xytTarget, xytFluidMasked))
+        uvpTarget = np.concatenate((uvpTarget, uvpFluidMasked))
       if xyPred[2]:
         xytTarget = np.concatenate((xytTarget, xytWalls))
         uvpTarget = np.concatenate((uvpTarget, uvpWalls))
 
-      # Only use points within boundaries
-      mask = self.get_wall_mask(xytTarget, useAll=True)
-      xytTargetMasked = xytTarget[mask]
-      uvpTargetMasked = uvpTarget[mask]
-
-      nGridPnt = len(xytTargetMasked)
+      nGridPnt = len(xytTarget)
 
       # Arrays to store batches
       xy = np.zeros((nGridPnt, self.dim),     dtype=float)
@@ -317,9 +320,9 @@ class BubbleDataSet:
       uv = np.zeros((nGridPnt, self.dim + 1), dtype=float)
 
       # Fill batch arrays
-      xy[:, :] = xytTargetMasked[:, :self.dim]
-      t[:, 0]  = xytTargetMasked[:, self.dim]
-      uv[:, :] = uvpTargetMasked[:, :]
+      xy[:, :] = xytTarget[:, :self.dim]
+      t[:, 0]  = xytTarget[:, self.dim]
+      uv[:, :] = uvpTarget[:, :]
 
       # Shift time range to start at zero
       if resetTime:

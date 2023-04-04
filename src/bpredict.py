@@ -111,11 +111,19 @@ for f in range(0, numPredFrames):
     # Get ground truth xyt and uvp of data, collocation, and / or wall points
     xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 1))
     if args.xyPred[0]:
-      xytOrig = np.concatenate((xytOrig, xytData))
-      uvpOrig = np.concatenate((uvpOrig, uvpData))
+      # Only use points within boundaries
+      mask = dataSet.get_wall_mask(xytData)
+      xytDataMasked = xytData[mask]
+      uvpDataMasked = uvpData[mask]
+      xytOrig = np.concatenate((xytOrig, xytDataMasked))
+      uvpOrig = np.concatenate((uvpOrig, uvpDataMasked))
     if args.xyPred[1]:
-      xytOrig = np.concatenate((xytOrig, xytFluid))
-      uvpOrig = np.concatenate((uvpOrig, uvpFluid))
+      # Only use points within boundaries
+      mask = dataSet.get_wall_mask(xytFluid)
+      xytFluidMasked = xytFluid[mask]
+      uvpFluidMasked = uvpFluid[mask]
+      xytOrig = np.concatenate((xytOrig, xytFluidMasked))
+      uvpOrig = np.concatenate((uvpOrig, uvpFluidMasked))
     if args.xyPred[2]:
       xytOrig = np.concatenate((xytOrig, xytWalls))
       uvpOrig = np.concatenate((uvpOrig, uvpWalls))

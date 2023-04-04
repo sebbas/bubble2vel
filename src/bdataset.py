@@ -294,7 +294,6 @@ class BubbleDataSet:
 
       # Get ground truth xyt and uvp of data, collocation, and / or wall points
       xytTarget, uvpTarget = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1))
-      print(xytData.shape)
       if xyPred[0]:
         xytTarget = np.concatenate((xytTarget, xytData))
         uvpTarget = np.concatenate((uvpTarget, uvpData))
@@ -324,10 +323,9 @@ class BubbleDataSet:
 
       # Shift time range to start at zero
       if resetTime:
-        print('min, max xyt[0]: [{}, {}]'.format(np.min(t[:,0]), np.max(t[:,0])))
         t[:,0] -= self.startFrame
         if UT.PRINT_DEBUG:
-          print(self.startFrame)
+          print('Start frame: {}'.format(self.startFrame))
 
       # Zero mean for time range (use -1 to account for 0 in center)
       if zeroMean:

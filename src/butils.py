@@ -33,7 +33,7 @@ worldSize = pixelSize * 1024     # [meters], must mult with res that the pixel s
 imageSize = 512
 
 
-# Values for experimental dataset (flownet, water)
+# Values for simulation dataset (FlashX, FC-72)
 # Reference quantities for non-dimensionalization
 V_fx         = 0.0868                 # [meter/second],     Reference velocity
 L_fx         = 7e-4                   # [meter],            Reference length

@@ -353,7 +353,7 @@ class BubbleDataSet:
         vel = UT.vel_domain_to_world(uv, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
 
-      dummy = 0
+      dummy = vel
       yield [pos, time, vel], dummy
 
 
@@ -494,7 +494,7 @@ class BubbleDataSet:
         vel = UT.vel_domain_to_world(uv, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
 
-      dummy = 0
+      dummy = vel
       yield [pos, time, vel, id, phi], dummy
 
 

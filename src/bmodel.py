@@ -235,7 +235,7 @@ class BModel(keras.Model):
 
 
     # Compute initial condition loss
-    if 0:
+    if self.initialCondition:
       # Add initial condition loss to data loss (it's using the collocation points but with MSE)
       initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
       nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10

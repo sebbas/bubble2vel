@@ -79,6 +79,8 @@ parser.add_argument('-src', '--source', type=int, default=0,
                     help='type of training data source, either 1: experiment or 2: simulation')
 parser.add_argument('-rt', '--resetTime', default=False, action='store_true',
                     help='start dataset time at zero')
+parser.add_argument('-ic', '--initCond', default=False, action='store_true',
+                    help='use first frame to set initial condition with MSE')
 
 args = parser.parse_args()
 
@@ -89,7 +91,7 @@ assert args.file.endswith('.h5')
 dataSet = BD.BubbleDataSet(wallPoints=args.nWallPnt, \
                            colPoints=args.nColPoint, dataPoints=args.nDataPoint)
 dataSet.restore(args.file)
-dataSet.prepare_batch_arrays(zeroInitialCollocation=True, resetTime=args.resetTime, zeroMean=0)
+dataSet.prepare_batch_arrays(zeroInitialCollocation=True, resetTime=args.resetTime, zeroMean=0, initialCondition=args.initCond)
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 1)
@@ -131,7 +133,8 @@ modelName = nameStr + archStr + paramsStr
 #with BM.strategy.scope():
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
-                      Re=UT.get_reynolds_number(args.source))
+                      Re=UT.get_reynolds_number(args.source), \
+                      initialCondition=args.initCond)
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 
 bubbleNet.preview()

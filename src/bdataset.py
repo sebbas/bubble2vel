@@ -360,7 +360,7 @@ class BubbleDataSet:
       yield [pos, time, vel], dummy
 
 
-  def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=True, zeroMean=True):
+  def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=True, zeroMean=True, initialCondition=False):
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
 
@@ -423,9 +423,8 @@ class BubbleDataSet:
       print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xyt[:,1]), np.max(self.xyt[:,1])))
       print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xyt[:,2]), np.max(self.xyt[:,2])))
 
-    initialCond = 0
     # Use the collocation points at the initial timestamp to set initial condition
-    if initialCond:
+    if initialCondition:
       tInit   = np.min(self.xyt[:,2])         # Use min timestamp as the initial time
       isTInit = (self.xyt[:,2] == tInit)      # Select all t's at initial time
       isCol   = (self.id[:,0] == 0)           # Select all collocation points

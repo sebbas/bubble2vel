@@ -797,7 +797,7 @@ class BubbleDataSet:
         self._thicken_interface(self.phiInit, flags, tmpIntersection, phi=curPhi, fromInside=False)
       elif self.source == UT.SRC_FLASHX:
         self._extract_flashx_points(curPhi, intersection, flags)
-        self._thicken_interface(self.interface, flags, intersection, curPhi, fromInside=False)
+        self._thicken_interface(self.interface, flags, intersection, phi=None, fromInside=False)
 
       if UT.IMG_DEBUG:
         UT.save_image(intersection, '{}/all'.format(self.sourceName), 'datapts_all', frame, i=self.interface)

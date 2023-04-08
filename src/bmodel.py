@@ -25,10 +25,11 @@ class BModel(keras.Model):
 
     self.width = width
     self.reg   = reg
+    act = 'tanh'
     if reg == None:
-      self.mlp = DenseLayers(width=width, prefix='bc', act='tanh', last_linear=True)
+      self.mlp = DenseLayers(width=width, act=act, last_linear=True)
     else:
-      self.mlp = DenseLayers(width=width, reg=reg, prefix='bc', act='tanh', last_linear=True)
+      self.mlp = DenseLayers(width=width, reg=reg, act=act, last_linear=True)
     # Coefficient for data and pde loss
     self.alpha = alpha
     self.beta  = beta

@@ -174,9 +174,10 @@ class BModel(keras.Model):
     # Track computation for 2nd derivatives for u, v
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
       tape2.watch(xy)
-      with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape1:
+      with tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape1, \
+           tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape0:
         tape1.watch(xy)
-        tape1.watch(t)
+        tape0.watch(t)
         uvpPred = self([xy, t, uv], training=True)
         uPred   = uvpPred[:,0]
         vPred   = uvpPred[:,1]
@@ -188,9 +189,10 @@ class BModel(keras.Model):
       u_x, u_y = u_grad[:,0], u_grad[:,1]
       v_x, v_y = v_grad[:,0], v_grad[:,1]
       p_x, p_y = p_grad[:,0], p_grad[:,1]
-      u_t = tape1.gradient(uPred, t)
-      v_t = tape1.gradient(vPred, t)
+      u_t = tape0.gradient(uPred, t)
+      v_t = tape0.gradient(vPred, t)
       del tape1
+      del tape0
     # 2nd order derivatives
     u_xx = tape2.gradient(u_x, xy)[:,0]
     u_yy = tape2.gradient(u_y, xy)[:,1]
@@ -210,8 +212,8 @@ class BModel(keras.Model):
     pdeTrue = 0.0
     Re      = self.Re
     pde0    = u_x + v_y
-    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
-    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
+    pde1    = tf.transpose(u_t) + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
+    pde2    = tf.transpose(v_t) + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
 
     if 0:
       # tInit: The timestamp (dimensionless number after zero-mean shift) where the initial condition is taken from

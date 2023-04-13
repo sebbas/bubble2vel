@@ -36,7 +36,10 @@ class DenseLayers(keras.layers.Layer):
       self.layers.append(keras.layers.Dense(w, activation=activation,
                          kernel_regularizer=keras.regularizers.l2(reg[i]),
                          name=prefix+repr(i)))
-
+      batchNorm = 0
+      if batchNorm:
+        self.layers.append(keras.layers.BatchNormalization(
+                           name=prefix+'batchnorm_'+repr(i)))
 
   def call(self, inputs):
     dense = inputs

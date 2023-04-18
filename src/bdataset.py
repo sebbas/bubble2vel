@@ -58,6 +58,7 @@ class BubbleDataSet:
     self.uvpFluid = None # [nSamples, dim + 1]
     self.bcDomain = None # [nSamples, dim + 1]
     self.xyDomain = None # [nSamples, dim + 1]
+    self.idDomain = None # [nSamples]
     # Arrays to store selection of points
     self.xyCol    = None # [nColPnt,  dim + 1]
     self.uvpCol   = None # [nColPnt,  dim + 1]
@@ -512,6 +513,9 @@ class BubbleDataSet:
 
     bcFrameLst = [] # Domain boundary condition for every frame
     xyFrameLst = [] # Domain boundary condition xy for every frame
+    idFrameLst = [] # Domain boundary condition id for every frame
+
+    idLeft, idTop, idRight, idBottom = 20, 21, 22, 23
 
     sizeX, sizeY = self.size
 
@@ -536,7 +540,7 @@ class BubbleDataSet:
       uvpZero = [0, 0, 0]
 
       # xyt positions, using origin 'lower' (x from left to right, y from bottom to top)
-      xyLst = []
+      xyLst, idLst = [], []
       cellCnt = 0
 
       # Walls:
@@ -546,7 +550,9 @@ class BubbleDataSet:
         x = np.full((numCells,), bWLeft-i, dtype=float)
         y = np.linspace(bWBottom+1, sizeY-1-bWTop-1, num=numCells, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
+        d = np.full((numCells,), idLeft, dtype=int)
         xyLst.extend(list(zip(x,y,t)))
+        idLst.extend(list(d))
         cellCnt += numCells
 
       # Top domain wall
@@ -555,7 +561,9 @@ class BubbleDataSet:
         x = np.linspace(bWLeft+1, sizeX-1-bWRight-1, num=numCells, dtype=float)
         y = np.full((numCells,), sizeY-1-bWTop+i, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
+        d = np.full((numCells,), idTop, dtype=int)
         xyLst.extend(list(zip(x,y,t)))
+        idLst.extend(list(d))
         cellCnt += numCells
 
       # Right domain wall
@@ -564,7 +572,9 @@ class BubbleDataSet:
         x = np.full((numCells,), sizeX-1-bWRight+i, dtype=float)
         y = np.linspace(sizeY-1-bWTop-1, bWBottom+1, num=numCells, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
+        d = np.full((numCells,), idRight, dtype=int)
         xyLst.extend(list(zip(x,y,t)))
+        idLst.extend(list(d))
         cellCnt += numCells
 
       # Bottom domain wall
@@ -573,45 +583,55 @@ class BubbleDataSet:
         x = np.linspace(sizeY-1-bWRight-1, bWLeft+1, num=numCells, dtype=float)
         y = np.full((numCells,), bWBottom-i, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
+        d = np.full((numCells,), idBottom, dtype=int)
         xyLst.extend(list(zip(x,y,t)))
+        idLst.extend(list(d))
         cellCnt += numCells
 
       # Corners:
       # Top left corner
       if hasLeftWall or hasTopWall:
-        acc = []
+        accXyt, accId = [], []
         for i in range(0, max(1, self.walls[0])): # left
           for j in range(min(sizeY-self.walls[1], sizeY-1), sizeY): # top
-            acc.append((i,j,frame))
+            accXyt.append((i,j,frame))
+            accId.append(idLeft) # Define top left corner as part of left wall
             cellCnt += 1
-        xyLst.extend(acc)
+        xyLst.extend(accXyt)
+        idLst.extend(accId)
 
       # Top right corner
       if hasRightWall or hasTopWall:
-        acc = []
+        accXyt, accId = [], []
         for i in range(min(sizeX-self.walls[2], sizeX-1), sizeX): # right
           for j in range(min(sizeY-self.walls[1], sizeY-1), sizeY): # top
-            acc.append((i,j,frame))
+            accXyt.append((i,j,frame))
+            accId.append(idRight) # Define top right corner as part of right wall
             cellCnt += 1
-        xyLst.extend(acc)
+        xyLst.extend(accXyt)
+        idLst.extend(accId)
 
       # Bottom left corner
       if hasLeftWall or hasBottomWall:
-        acc = []
+        accXyt, accId = [], []
         for i in range(0, max(1, self.walls[0])): # left
           for j in range(0, max(1, self.walls[3])): # bottom
-            acc.append((i,j,frame))
+            accXyt.append((i,j,frame))
+            accId.append(idLeft) # Define bottom left corner as part of left wall
             cellCnt += 1
-        xyLst.extend(acc)
+        xyLst.extend(accXyt)
+        idLst.extend(accId)
 
       # Bottom right corner
       if hasRightWall or hasBottomWall:
-        acc = []
+        accXyt, accId = [], []
         for i in range(min(sizeX-self.walls[2], sizeX-1), sizeX): # right
           for j in range(0, max(1, self.walls[3])): # bottom
-            acc.append((i,j,frame))
+            accXyt.append((i,j,frame))
+            accId.append(idRight) # Define bottom right corner as part of right wall
             cellCnt += 1
-        xyLst.extend(acc)
+        xyLst.extend(accXyt)
+        idLst.extend(accId)
 
       # uvp labels
       bcLst = []
@@ -628,6 +648,7 @@ class BubbleDataSet:
 
       bcFrameLst.append(bcLst)
       xyFrameLst.append(xyLst)
+      idFrameLst.append(idLst)
 
       if UT.IMG_DEBUG:
         UT.save_array(xyLst, '{}/all'.format(self.sourceName), 'wallpts_all', frame, self.size)
@@ -640,18 +661,22 @@ class BubbleDataSet:
 
     self.bcDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
     self.xyDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
+    self.idDomain = np.zeros((np.sum(self.nWalls)), dtype=int)
 
     s = 0
     for f in range(self.nTotalFrames):
       assert len(bcFrameLst[f]) == len(xyFrameLst[f]), 'Number of velocity labels must match number of xy positions'
+      assert len(bcFrameLst[f]) == len(xyFrameLst[f]), 'Number of velocity labels must match number of ids'
 
       n = len(bcFrameLst[f])
       e = s + n
       if n:
         uvp = np.asarray(bcFrameLst[f], dtype=float)
         xyt = np.asarray(xyFrameLst[f], dtype=float)
+        ids = np.asarray(idFrameLst[f], dtype=int)
         self.bcDomain[s:e, :] = uvp
         self.xyDomain[s:e, :] = xyt
+        self.idDomain[s:e]    = ids
       s = e
 
 
@@ -1100,6 +1125,8 @@ class BubbleDataSet:
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.bcDomain)
     dFile.create_dataset('xyDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyDomain)
+    dFile.create_dataset('idDomain', (nSampleWalls,), compression=comp_type,
+                          compression_opts=comp_level, dtype='int32', chunks=True, data=self.idDomain)
 
     dFile.close()
     print('Saved dataset to file {}'.format(fname))
@@ -1128,6 +1155,7 @@ class BubbleDataSet:
     self.xyFluid  = np.array(dFile.get('xyFluid'))
     self.bcDomain = np.array(dFile.get('bcDomain'))
     self.xyDomain = np.array(dFile.get('xyDomain'))
+    self.idDomain = np.array(dFile.get('idDomain'))
 
     self.isLoaded = True
     self.nTotalFrames = self.endFrame - self.startFrame + 1
@@ -1209,6 +1237,12 @@ class BubbleDataSet:
     s = sum(self.nWalls[:f])
     e = s + self.nWalls[f]
     return self.bcDomain[s:e, ...]
+
+
+  def get_id_walls(self, f):
+    s = sum(self.nWalls[:f])
+    e = s + self.nWalls[f]
+    return self.idDomain[s:e]
 
 
   '''

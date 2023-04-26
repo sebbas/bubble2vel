@@ -26,7 +26,7 @@ class BubbleDataSet:
   FLAG_VISITED = 1
 
   def __init__(self, fName='', startFrame=0, endFrame=399, dim=2, \
-               wallPoints=-1, colPoints=-1, dataPoints=-1, walls=[1,1,1,1], \
+               wallPoints=-1, colPoints=-1, dataPoints=-1, icondPoints=-1, walls=[1,1,1,1], \
                interface=1, source=UT.SRC_FLOWNET):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
@@ -49,6 +49,7 @@ class BubbleDataSet:
     self.nColPnt  = colPoints
     self.nWallPnt = wallPoints
     self.nDataPnt = dataPoints
+    self.nIcondPnt = icondPoints
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim + 1]
     # Arrays to store processed data (after processing ground truth)
@@ -66,6 +67,9 @@ class BubbleDataSet:
     self.uvData   = None # [nDataPnt, dim + 1]
     self.xyWalls  = None # [nWallPnt, dim + 1]
     self.uvWalls  = None # [nWallPnt, dim + 1]
+    self.idWalls  = None # [nWallPnt]
+    self.xyIcond  = None # [nIcondPnt, dim + 1]
+    self.uvIcond  = None # [nIcondPnt, dim + 1]
     # Arrays to store (shuffled) mix of data and collocation points
     self.labels   = None
     self.xyt      = None
@@ -377,29 +381,17 @@ class BubbleDataSet:
     useAllWallPts = (self.nWallPnt < 0)
     self.select_wall_points(useAllWallPts)
 
-    # TODO: Add option to use old collocation point label init
-    if 0:
-      # Init collocation point labels with 0.0
-      if zeroInitialCollocation:
-        colPntLabel = 0.0
-        uvCol = np.full((self.nColPnt, self.dim + 1), colPntLabel)
-      else: # Init collocation point label with random values in range of min/max of data point label
-        minU, maxU = np.min(self.bc[:,0]), np.max(self.bc[:,0])
-        minV, maxV = np.min(self.bc[:,1]), np.max(self.bc[:,1])
-        samplesU = np.random.uniform(low=minU, high=maxU, size=self.nColPnt)
-        samplesV = np.random.uniform(low=minV, high=maxV, size=self.nColPnt)
-        samplesU = np.expand_dims(samplesU, axis=-1)
-        samplesV = np.expand_dims(samplesV, axis=-1)
-        samplesP = np.zeros(self.nColPnt)
-        samplesP = np.expand_dims(samplesP, axis=-1)
-        uvCol = np.concatenate((samplesU, samplesV, samplesP), axis=-1)
+    # Extract selection of wall points (otherwise use all)
+    useDefaultIcondPts = (self.nIcondPnt < 0)
+    self.select_icond_points(useDefaultIcondPts)
 
-    uvpSamples = np.concatenate((self.uvData, self.uvpCol, self.uvWalls))
-    xytSamples = np.concatenate((self.xyData, self.xyCol, self.xyWalls))
+    uvpSamples = np.concatenate((self.uvData, self.uvpCol, self.uvWalls, self.uvIcond))
+    xytSamples = np.concatenate((self.xyData, self.xyCol, self.xyWalls, self.xyIcond))
     dataId     = np.full((len(self.xyData), 1), 1)
     colId      = np.full((len(self.xyCol), 1), 0)
-    wallId     = np.full((len(self.xyWalls), 1), 2)
-    idSamples  = np.concatenate((dataId, colId, wallId))
+    wallId     = np.expand_dims(self.idWalls, axis=-1)
+    icondId    = np.full((len(self.xyIcond), 1), 3)
+    idSamples  = np.concatenate((dataId, colId, wallId, icondId))
 
     assert len(uvpSamples) == len(xytSamples)
     assert len(uvpSamples) == len(idSamples)
@@ -1037,6 +1029,50 @@ class BubbleDataSet:
         UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/collocation'.format(self.sourceName), 'colpts_select', frame, self.size)
 
 
+  def select_icond_points(self, default=False):
+    UT.print_info('Selecting initial condition points')
+    rng = np.random.default_rng(2022)
+
+    # No specific number of icond points supplied in cmd-line args
+    if default:
+      self.nIcondPnt = self.nDataPnt * 2
+
+    # Allocate array based on actual number of points
+    self.xyIcond = np.zeros((self.nIcondPnt, self.dim + 1))
+    self.uvIcond = np.zeros((self.nIcondPnt, self.dim + 1))
+
+    # Get all fluid coords for 1st frame
+    f = 0
+    frame = f + self.startFrame
+
+    xyFluidFrame = self.get_xy_fluid(f)
+    uvpFluidFrame = self.get_uvp_fluid(f)
+
+    # Only use every other grid point (self.colRes == interval) as collocation point
+    mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
+    xyFluidFrameMasked = xyFluidFrame[mask]
+    uvpFluidFrameMasked = uvpFluidFrame[mask]
+
+    # Only use points within boundaries
+    mask = self.get_wall_mask(xyFluidFrameMasked)
+    xyFluidFrameMasked = xyFluidFrameMasked[mask]
+    uvpFluidFrameMasked = uvpFluidFrameMasked[mask]
+
+    # Insert random selection of fluid coords into icond array
+    if UT.PRINT_DEBUG:
+      print('Taking {} initial condition points out of {} available'.format(self.nIcondPnt, xyFluidFrameMasked.shape[0]))
+    indices = np.arange(0, xyFluidFrameMasked.shape[0])
+    randIndices = rng.choice(indices, size=self.nIcondPnt, replace=False)
+    s = 0
+    e = s + self.nIcondPnt
+    self.xyIcond[s:e, :] = xyFluidFrameMasked[randIndices, :]
+    self.uvIcond[s:e, :] = uvpFluidFrameMasked[randIndices, :]
+    s = e
+
+    if UT.IMG_DEBUG:
+      UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/icond'.format(self.sourceName), 'icondpts_select', frame, self.size)
+
+
   def select_wall_points(self, all=False):
     UT.print_info('Selecting wall points')
     rng = np.random.default_rng(2022)
@@ -1045,6 +1081,7 @@ class BubbleDataSet:
     if all:
       self.xyWalls = copy.deepcopy(self.xyDomain)
       self.uvWalls = copy.deepcopy(self.bcDomain)
+      self.idWalls = copy.deepcopy(self.idDomain)
       self.nWallPnt = len(self.xyWalls)
       print('Using {} wall points'.format(self.nWallPnt))
       return
@@ -1056,6 +1093,7 @@ class BubbleDataSet:
     # Allocate arrays based on actual number of points
     self.xyWalls = np.zeros((self.nWallPnt, self.dim + 1))
     self.uvWalls = np.zeros((self.nWallPnt, self.dim + 1))
+    self.idWalls = np.zeros((self.nWallPnt))
 
     print('Using {} wall points'.format(self.nWallPnt))
 
@@ -1071,6 +1109,7 @@ class BubbleDataSet:
       # Get all data point coords and vels for the current frame
       xyWallsFrame = self.get_xy_walls(f)
       uvWallsFrame = self.get_bc_walls(f)
+      idWallsFrame = self.get_id_walls(f)
 
       # Insert random selection of data point coords into data point array
       if UT.PRINT_DEBUG:
@@ -1080,6 +1119,7 @@ class BubbleDataSet:
       e = s + nWallsPntPerFrame
       self.xyWalls[s:e, :] = xyWallsFrame[randIndices, :]
       self.uvWalls[s:e, :] = uvWallsFrame[randIndices, :]
+      self.idWalls[s:e]    = idWallsFrame[randIndices]
       s = e
 
       if UT.IMG_DEBUG:
@@ -1164,6 +1204,10 @@ class BubbleDataSet:
     print('Dataset: size [{},{}], frames {}'.format(self.size[0], self.size[1], self.nTotalFrames))
 
 
+  def get_num_icond_pts(self):
+    return self.nIcondPnt
+
+
   def get_num_wall_pts(self):
     return self.nWallPnt
 
@@ -1174,6 +1218,11 @@ class BubbleDataSet:
 
   def get_num_col_pts(self):
     return self.nColPnt
+
+
+  def get_num_total_pts(self):
+    return self.get_num_icond_pts() + self.get_num_wall_pts() + \
+           self.get_num_data_pts() + self.get_num_col_pts()
 
 
   def get_num_fluid(self, fromFrame, toFrame):

@@ -70,6 +70,10 @@ class BubbleDataSet:
     self.idWalls  = None # [nWallPnt]
     self.xyIcond  = None # [nIcondPnt, dim + 1]
     self.uvIcond  = None # [nIcondPnt, dim + 1]
+    # Arrays to store boundary condition per frame
+    self.xytDataBc    = None # [nTotalFrames, max(nBcBubble), dim + 1]
+    self.uvpDataBc    = None # [nTotalFrames, max(nBcBubble), dim + 1]
+    self.validDataBc  = None # [nTotalFrames, max(nWalls)]
     # Arrays to store (shuffled) mix of data and collocation points
     self.labels   = None
     self.xyt      = None
@@ -402,40 +406,83 @@ class BubbleDataSet:
     self.xyt    = xytSamples[perm]
     self.id     = idSamples[perm]
 
+    print('min, max uvp[0]: [{}, {}]'.format(np.min(self.labels[:,0]), np.max(self.labels[:,0])))
+    print('min, max uvp[1]: [{}, {}]'.format(np.min(self.labels[:,1]), np.max(self.labels[:,1])))
+    print('min, max uvp[2]: [{}, {}]'.format(np.min(self.labels[:,2]), np.max(self.labels[:,2])))
+
     # Shift time range to start at zero
     if resetTime:
       self.xyt[:,2] -= self.startFrame
 
     # Zero mean for pos range (use -1 to account for 0 in center)
     if zeroMean:
-      self.xyt[:,0] -= (self.size[0]-1) / 2
-      self.xyt[:,1] -= (self.size[1]-1) / 2
+      self.xyt[:,:1] -= (self.size-1) / 2
       #self.xyt[:,2] -= (self.nTotalFrames-1) / 2
 
-      print('min, max xyt[0]: [{}, {}]'.format(np.min(self.xyt[:,0]), np.max(self.xyt[:,0])))
-      print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xyt[:,1]), np.max(self.xyt[:,1])))
-      print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xyt[:,2]), np.max(self.xyt[:,2])))
-
-    # Use the collocation points at the initial timestamp to set initial condition
-    if initialCondition:
-      tInit   = np.min(self.xyt[:,2])         # Use min timestamp as the initial time
-      isTInit = (self.xyt[:,2] == tInit)      # Select all t's at initial time
-      isCol   = (self.id[:,0] == 0)           # Select all collocation points
-      isInit = np.logical_and(isTInit, isCol) # The initial condition points are here
-      self.id[isInit] = 3                     # Assign new id to these points
-
-    dataColPts = 0
-    if dataColPts:
-      indices = np.arange(0, self.xyCol.shape[0])
-      nTakeCol = int(self.nColPnt * 0.5)
-      randIndices = rng.choice(indices, size=nTakeCol, replace=False)
-      self.id[randIndices] = 4
-
-      if UT.IMG_DEBUG:
-        UT.save_array(self.xyCol[randIndices, :], '{}/collocation'.format(self.sourceName), 'colptslabelled_select', 30, self.size)
+    print('min, max xyt[0]: [{}, {}]'.format(np.min(self.xyt[:,0]), np.max(self.xyt[:,0])))
+    print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xyt[:,1]), np.max(self.xyt[:,1])))
+    print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xyt[:,2]), np.max(self.xyt[:,2])))
 
     assert len(self.labels) == len(self.xyt)
     assert len(self.labels) == len(self.id)
+
+
+  def prepare_hard_boundary_condition(self, zeroMean=False):
+    print('Preparing hard boundary condition')
+
+    # Use frame with max bc count for array dimension
+    maxInterface = np.max(self.nBcBubble)
+    maxWalls = np.max(self.nWalls)
+
+    interface = 0
+    walls = 1
+
+    maxCells = 0
+    if interface: maxCells += maxInterface
+    if walls: maxCells += maxWalls
+
+    if not maxCells:
+      print('Returning early, no boundary condition points present')
+      return
+
+    print('maxInterface, maxWalls: {}, {}'.format(maxInterface, maxWalls))
+
+    # Bubble interface and domain boundary condition: [nFrames, maxCells, nDim + 1]
+    self.xytDataBc = np.zeros((self.nTotalFrames, maxCells, self.dim + 1), dtype=float)
+    self.uvpDataBc = np.zeros((self.nTotalFrames, maxCells, self.dim + 1), dtype=float)
+    # Binary array that tracks valid entries (the ending entries might just be unused 0s)
+    self.validDataBc = np.zeros((self.nTotalFrames, maxCells), dtype=float)
+
+    # Zero mean for pos range (use -1 to account for 0 in center)
+    if zeroMean:
+      self.xytDataBc[:,:1] -= (self.size-1) / 2
+      #self.xytDataBc[:,2] -= (self.nTotalFrames-1) / 2
+
+    for f in range(self.nTotalFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, self.nTotalFrames)
+
+      eData = self.nBcBubble[f]
+      eWalls = self.nWalls[f]
+
+      print('nBubbles at frame {}: {}'.format(f, eData))
+
+      s = 0
+      if interface:
+        self.xytDataBc[f, s:eData, :] = self.get_xy_bc(f)
+        self.uvpDataBc[f, s:eData, :] = self.get_bc(f)
+        self.validDataBc[f, s:eData] = 1
+        s += maxInterface
+
+      if walls:
+        self.xytDataBc[f, s:s+eWalls, :] = self.get_xy_walls(f)
+        self.uvpDataBc[f, s:s+eWalls, :] = self.get_bc_walls(f)
+        self.validDataBc[f, s:s+eWalls] = 1
+
+      print(self.xytDataBc[f, :, :].shape)
+
+      print('min, max uvpDataBc[0]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,0]), np.max(self.uvpDataBc[f,:,0])))
+      print('min, max uvpDataBc[1]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,1]), np.max(self.uvpDataBc[f,:,1])))
 
 
   def generate_train_valid_batch(self, begin, end, worldSize, imageSize, fps, \
@@ -475,13 +522,20 @@ class BubbleDataSet:
         uv   = uv[perm]
         phi  = phi[perm]
 
+      idxT = np.concatenate(t.astype(int))
+      xyDataBc = self.xytDataBc[idxT, :, :2]
+      uvDataBc = self.uvpDataBc[idxT, :, :2]
+      validDataBc = self.validDataBc[idxT, :]
+
       # Convert from domain space to world space
       pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
       time = UT.time_domain_to_world(t, fps)
+      xyDataBc = UT.pos_domain_to_world(xyDataBc, worldSize, imageSize)
 
       # Convert from world space to dimensionless quantities
       pos  = UT.pos_world_to_dimensionless(pos, L)
       time = UT.time_world_to_dimensionless(time, T)
+      xyDataBc = UT.pos_world_to_dimensionless(xyDataBc, L)
 
       # Only non-dimensionalize velocities from flownet dataset
       vel = uv
@@ -490,7 +544,7 @@ class BubbleDataSet:
         vel = UT.vel_world_to_dimensionless(vel, V)
 
       dummy = vel
-      yield [pos, time, vel, id, phi], dummy
+      yield [pos, time, vel, xyDataBc, uvDataBc, validDataBc, id, phi], dummy
 
 
   # Define domain border locations + attach bc

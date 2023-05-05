@@ -2,6 +2,7 @@
 
 import tensorflow as tf
 import numpy as np
+import math
 
 np.random.seed(2022)
 tf.random.set_seed(2022)
@@ -64,91 +65,79 @@ class BModel(keras.Model):
     '''
     inputs: [xy, t, uvp]
     '''
-    xy = inputs[0]
-    t = inputs[1]
-    xyt = tf.concat([xy, t], axis=-1)
+    xy  = inputs[0]
+    t   = inputs[1]
+    uvp = inputs[2]
+
+    xyt = tf.concat([xy, t], axis=1)
     uvp = self.mlp(xyt)
-    bcUvp = inputs[2]
 
-    initCond = 0
-    omitP = 1 # TODO: Must be enabled for now
-    if initCond:
-      select = tf.cast(tf.math.equal(t, 0), tf.float32)
-      remove = tf.cast(tf.math.not_equal(t, 0), tf.float32)
-      if omitP:
-        uv, p = uvp[:,:2], uvp[:,2]
-        bcUv, bcP = bcUvp[:,:2], bcUvp[:,2]
-        p        = tf.expand_dims(p, axis=-1)
-        uv = bcUvp[:,:2] * select + uv[:,:2] * remove 
-        uvp   = tf.concat([uv, p], axis=-1)
+    # The dimensionless size of a single pixel and the domain
+    pixelSize = UT.get_pixelsize_dimensionless(UT.worldSize_fx, UT.imageSize_fx, UT.L_fx)
+    domainSize = pixelSize * (UT.imageSize_fx-1)
+    domainSizeFull = pixelSize * UT.imageSize_fx
 
-      '''
-      colMask = tf.cast(tf.math.equal(w, 0), tf.float32)
+    # Use hard boundary condition
+    # Reproduces exact values in boundary and filter networks effects near boundaries
+    withHardBc = 1
+    if withHardBc:
+      xyBc    = inputs[3]
+      uvBc    = inputs[4]
+      validBc = inputs[5]
 
-      bcUv, bcP = bcUvp[:,:2], bcUvp[:,2]
-      bcMask = tf.cast(tf.math.less(d, 1), tf.float32)
-      g = bcUvp * bcMask
-      if omitPBc:
-        g = g[:,:2]
-
-      omitP = 0
-      if omitP:
-        uv, p = uvp[:,:2], uvp[:,2]
-        p     = tf.expand_dims(p, axis=-1)
-        uv    = g + d * uv
-        #tf.print(uv.shape, summarize=64)
-        uvp   = tf.concat([uv, p], axis=-1)
-      else:
-        uvp = g + d * uvp
-      '''
-
-    filter = 0
-    if filter:
-      xy   = inputs[0]
+      # Normalize to [0,1] for IWD calculation
+      xy /= domainSize
+      xyBc /= domainSize
       x, y = xy[:,0], xy[:,1]
 
-      # The dimensionless size of a single pixel and the domain
-      pixelSize = UT.get_pixelsize_dimensionless(UT.worldSize_fx, UT.imageSize_fx, UT.L_fx)
-      domainSize = pixelSize * (UT.imageSize_fx-1)
+      # (1) Construct g. Gives exact bc in boundary cells, IDW interpolation value at every interior point
+      eps  = 1.0e-10
+      xyExp = tf.expand_dims(xy, axis=1)            # [nBatch, 1, nDim]
+      dist = tf.square(xyExp - xyBc)                # [nBatch, nXyBc, nDim]
+      dist = tf.reduce_sum(dist, axis=-1)           # [nBatch, nxyBc]
+      #dist = tf.math.sqrt(dist)                    # [nBatch, nXyBc]
+      wi = tf.pow(1.0 / (dist + eps), 2)            # [nBatch, nXyBc]
+      wi = wi * validBc                             # [nBatch, nXyBc]
+      wi = tf.expand_dims(wi, axis=-1)              # [nBatch, nxyBc, 1]
+      denom = tf.reduce_sum(wi, axis=1)             # [nBatch, 1, nDim]
+      numer = tf.reduce_sum(wi * uvBc, axis=1)      # [nBatch, 1, nDim]
+      g = numer / denom                             # [nBatch, nDim]
 
-      # Set how many pixels from border to use when filtering (left, top, right, bottom)
-      wallPixels = [1, 0, 1, 1]
-      filterSize = [pixelSize*pixelCnt for pixelCnt in wallPixels]
+      # (2) Construct phi. Zero in boundary cells, getting more positive at interior points
 
-      facLeft   = tf.clip_by_value(y/filterSize[0], 0, 1) if filterSize[0] else 1
-      facTop    = tf.clip_by_value((domainSize-y)/filterSize[1], 0, 1) if filterSize[1] else 1
-      facRight  = tf.clip_by_value((domainSize-x)/filterSize[2], 0, 1) if filterSize[2] else 1
-      facBottom = tf.clip_by_value(x/filterSize[3], 0, 1) if filterSize[3] else 1
-      #tf.print(facBottom, summarize=100)
+      # Use hard boundary along domain walls and/or bubble interface?
+      withWallsBc, withBubbleBc = 1, 0
+      phiWalls, phiBubble = np.inf, np.inf # Init levelsets with +inf
 
-      # Function d filters network effect near walls
-      leftBottom = tf.math.minimum(facLeft, facTop)
-      rightTop = tf.math.minimum(facRight, facBottom)
-      d = tf.expand_dims(tf.math.minimum(leftBottom, rightTop), axis=-1)
-      #d += 1e-10 # Avoid zero factors
+      # Construct levelset for wall boundary
+      if withWallsBc:
+        scaleW = 4.0                        # Scales phiWalls from [0,0.25] to [0,1]
+        phiWalls = (x * (1-x) * y) * scaleW # Left, right, bottom: no-slip, top: open
 
-      omitPBc = 1
-      # Function g contains exact data from boundary cells
-      g = 0
-      if 1: #training:
-        #bcUvp = inputs[2]
-        bcUv, bcP = bcUvp[:,:2], bcUvp[:,2]
-        bcMask = tf.cast(tf.math.less(d, 1), tf.float32) # 1s in walls, 0s in fluid
-        fluidMask = tf.cast(tf.math.greater_equal(d, 1), tf.float32) # 0s in walls, 1s in fluid
-        #tf.print(d, summarize=64)
-        g = bcUvp * bcMask
-        if omitPBc:
-          g = g[:,:2]
-        #tf.print(g, summarize=64)
+        # Alternative functions for phi
+        # (A) Based on exp function
+        #fac = 2
+        #phiWalls = (-fac**2*tf.pow((x-0.5), fac) + 1) * (-fac**2*tf.pow((x-0.5), fac) + 1) * \
+        #           (-fac**2*tf.pow((y-0.5), fac) + 1) * (-fac**2*tf.pow((y-0.5), fac) + 1)
+        # (B) Based on tanh function
+        #phiWalls = (0.5*(tf.math.tanh(-13*(x-.5)-4) * tf.math.tanh(13*(x-.5)-4)+1)) * (0.5*(tf.math.tanh(-13*(y-.5)-4) * tf.math.tanh(13*(y-.5)-4)+1))
+        # (C) Based on tanh function (open top)
+        #phiWalls = (0.5*(tf.math.tanh(-13*(x-.5)-4) * tf.math.tanh(13*(x-.5)-4)+0.986614)) * (0.5*(tf.math.tanh(13*(y-.5)+4)+0.986614))
 
-      if omitPBc:
-        uv, p = uvp[:,:2], uvp[:,2]
-        p     = tf.expand_dims(p, axis=-1)
-        uv    = g + fluidMask * uv
-        #tf.print(uv.shape, summarize=64)
-        uvp   = tf.concat([uv, p], axis=-1)
-      else:
-        uvp   = g + d * uvp
+      # Construct levelset for bubble boundary
+      if withBubbleBc:
+        phiV = uvp[:,2]
+        phiBubble = (tf.abs(phiV) / domainSizeFull) # TODO: Add phi from bubble bc
+
+      # Join domain and bubble boundary levelsets
+      phi = tf.math.minimum(phiBubble, phiWalls)
+
+      # Assemble g and phi with uvp
+      uv, p = uvp[:,:2], uvp[:,2]
+      phi   = tf.expand_dims(phi, axis=-1)
+      uv    = g + uv * phi                 # [nBatch, nDim]
+      p     = tf.expand_dims(p, axis=-1)   # [nBatch, 1]
+      uvp   = tf.concat([uv, p], axis=-1)  # [nBatch, nDim + 1]
 
     return uvp
 
@@ -170,7 +159,7 @@ class BModel(keras.Model):
         self.trainMetrics[prefix+'std'].update_state(gStd)
 
 
-  def compute_losses(self, xy, t, w, phi, uv):
+  def compute_losses(self, xy, t, w, phi, uv, xyBc, uvBc, validBc):
     # Track computation for 2nd derivatives for u, v
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
       tape2.watch(xy)
@@ -178,7 +167,7 @@ class BModel(keras.Model):
            tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape0:
         tape1.watch(xy)
         tape0.watch(t)
-        uvpPred = self([xy, t, uv], training=True)
+        uvpPred = self([xy, t, uv, xyBc, uvBc, validBc, w, phi], training=True)
         uPred   = uvpPred[:,0]
         vPred   = uvpPred[:,1]
         pPred   = uvpPred[:,2]
@@ -215,78 +204,57 @@ class BModel(keras.Model):
     pde1    = tf.transpose(u_t) + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
     pde2    = tf.transpose(v_t) + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
 
-    if 0:
-      # tInit: The timestamp (dimensionless number after zero-mean shift) where the initial condition is taken from
-      tInit = 0.0
-      isInitCond  = tf.cast(tf.math.equal(t, tInit), tf.float32)
-      notInitCond = tf.cast(tf.math.not_equal(t, tInit), tf.float32)
-
-      #isColInit      = tf.cast(tf.math.logical_and(isInitCond, colMask), tf.float32)
-      nPdePoint = tf.reduce_sum(colMask * notInitCond) + 1.0e-10
-      nInitCondPoint = tf.reduce_sum(colMask * isInitCond) + 1.0e-10
-
-      #tf.print(nPdePoint, summarize=64)
-      #a = tf.reduce_sum(colMask * notInitCond)
-      #tf.print(tf.math.equal(nPdePoint, a))
-      pdeMse0  = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask * notInitCond) / nPdePoint
-      pdeMse1  = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask * notInitCond) / nPdePoint
-      pdeMse2  = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask * notInitCond) / nPdePoint
-      #tf.print(tf.reduce_sum(colMask * notInitCond))
-      uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * colMask * isInitCond) / nInitCondPoint
-      vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * colMask * isInitCond) / nInitCondPoint
-      pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * colMask * isInitCond) / nInitCondPoint
-
-
-    # Compute initial condition loss
-    if self.initialCondition:
-      # Add initial condition loss to data loss (it's using the collocation points but with MSE)
-      initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
-      nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
-      uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * initCondMask) / nInitCondPoint
-      vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * initCondMask) / nInitCondPoint
-      pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * initCondMask) / nInitCondPoint
-
-    # Compute informed collocation loss
-    if 0:
-      # Add initial condition loss to data loss (it's using the collocation points but with MSE)
-      colDataMask = tf.cast(tf.equal(w, 4), tf.float32)
-      nColDataPoint = tf.reduce_sum(colDataMask) + 1.0e-10
-      uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * colDataMask) / nColDataPoint
-      vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * colDataMask) / nColDataPoint
-      pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * colDataMask) / nColDataPoint
+    # Add initial condition loss to data loss
+    initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
+    nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
+    uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * initCondMask) / nInitCondPoint
+    vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * initCondMask) / nInitCondPoint
+    pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * initCondMask) / nInitCondPoint
 
     # Compute PDE loss
-    if 1:
-      #phi = tf.squeeze(phi)
-      #phiInv = 1 / tf.abs(phi)
-      colMask = tf.cast(tf.equal(w, 0), tf.float32)
-      nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
-      pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
-      pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
-      pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
+    colMask = tf.cast(tf.equal(w, 0), tf.float32)
+    nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
+    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
+    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
+    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
 
-    # Compute domain wall loss
-    wallMask = tf.cast(tf.equal(w, 2), tf.float32)
+    # Compute domain wall loss for velocity
+    wallMask = tf.cast(tf.equal(w, 20), tf.float32)  # left
+    wallMask += tf.cast(tf.equal(w, 21), tf.float32) # top
+    wallMask += tf.cast(tf.equal(w, 22), tf.float32) # right
+    wallMask += tf.cast(tf.equal(w, 23), tf.float32) # bottom
     nWallsPoint = tf.reduce_sum(wallMask) + 1.0e-10
+    # Impose ground truth velocity bc
+    velocityTrue = 0
     uMseWalls = tf.reduce_sum(tf.square(uv[:,0] - uPred) * wallMask) / nWallsPoint
     vMseWalls = tf.reduce_sum(tf.square(uv[:,1] - vPred) * wallMask) / nWallsPoint
-    pMseWalls = tf.reduce_sum(tf.square(uv[:,2] - pPred) * wallMask) / nWallsPoint
+
+    # Compute domain wall loss for pressure
+    wallMask = tf.cast(tf.equal(w, 21), tf.float32) # top
+    nWallsPoint = tf.reduce_sum(wallMask) + 1.0e-10
+    # Impose zero-pressure bc
+    pressureTrue = 0
+    pMseWalls = tf.reduce_sum(tf.square(pressureTrue - pPred) * wallMask) / nWallsPoint
 
     return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
 
 
   def train_step(self, data):
-    xy  = data[0][0]
-    t   = data[0][1]
-    uv  = data[0][2]
-    w   = data[0][3]
-    phi = data[0][4]
+    # A batch of points has ...
+    xy      = data[0][0] # xy positions
+    t       = data[0][1] # timestamps
+    uv      = data[0][2] # uv velocities
+    xyBc    = data[0][3] # xy positions of all bc points
+    uvBc    = data[0][4] # uv velocities of all bc points
+    validBc = data[0][5] # binary value indicating if bc points is valid
+    w       = data[0][6] # id of the point (e.g. collocation, wall, ...)
+    phi     = data[0][7] # SDF value
 
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
       uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-        self.compute_losses(xy, t, w, phi, uv)
+        self.compute_losses(xy, t, w, phi, uv, xyBc, uvBc, validBc)
       # replica's loss, divided by global batch size
       loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
               + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
@@ -347,15 +315,18 @@ class BModel(keras.Model):
 
 
   def test_step(self, data):
-    xy  = data[0][0]
-    t   = data[0][1]
-    uv  = data[0][2]
-    w   = data[0][3]
-    phi = data[0][4]
+    xy      = data[0][0]
+    t       = data[0][1]
+    uv      = data[0][2]
+    xyBc    = data[0][3]
+    uvBc    = data[0][4]
+    validBc = data[0][5]
+    w       = data[0][6]
+    phi     = data[0][7]
 
     # Compute the data and pde losses
     uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-      self.compute_losses(xy, t, w, phi, uv)
+      self.compute_losses(xy, t, w, phi, uv, xyBc, uvBc, validBc)
     # replica's loss, divided by global batch size
     loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \

@@ -290,7 +290,7 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, xyPred=[1,1,1], resetTime=True, zeroMean=True):
+  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1e4), hardBc=True):
     print('Generating prediction points')
 
     for f in range(begin, end):
@@ -302,7 +302,7 @@ class BubbleDataSet:
       xytWalls = self.get_xy_walls(f)
 
       # Get ground truth xyt and uvp of data, collocation, and / or wall points
-      xytTarget, uvpTarget = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1))
+      xytTarget, uvpTarget, ids = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, 1))
       if xyPred[0]:
         # Only use points within boundaries
         mask = self.get_wall_mask(xytData)
@@ -310,6 +310,8 @@ class BubbleDataSet:
         uvpDataMasked = uvpData[mask]
         xytTarget = np.concatenate((xytTarget, xytDataMasked))
         uvpTarget = np.concatenate((uvpTarget, uvpDataMasked))
+        dataIds = np.full((len(xytDataMasked), 1), 1)
+        ids     = np.concatenate((ids, dataIds))
       if xyPred[1]:
         # Only use points within boundaries
         mask = self.get_wall_mask(xytFluid)
@@ -317,56 +319,83 @@ class BubbleDataSet:
         uvpFluidMasked = uvpFluid[mask]
         xytTarget = np.concatenate((xytTarget, xytFluidMasked))
         uvpTarget = np.concatenate((uvpTarget, uvpFluidMasked))
+        colIds  = np.full((len(xytFluidMasked), 1), 0)
+        ids     = np.concatenate((ids, colIds))
       if xyPred[2]:
         xytTarget = np.concatenate((xytTarget, xytWalls))
         uvpTarget = np.concatenate((uvpTarget, uvpWalls))
+        wallIds  = np.full((len(xytWalls), 1), 0)
+        ids      = np.concatenate((ids, wallIds))
 
       nGridPnt = len(xytTarget)
 
-      # Arrays to store batches
-      xy = np.zeros((nGridPnt, self.dim),     dtype=float)
-      t  = np.zeros((nGridPnt, 1),            dtype=float)
-      uv = np.zeros((nGridPnt, self.dim + 1), dtype=float)
+      print('nGridPnt is {}'.format(nGridPnt))
 
-      # Fill batch arrays
-      xy[:, :] = xytTarget[:, :self.dim]
-      t[:, 0]  = xytTarget[:, self.dim]
-      uv[:, :] = uvpTarget[:, :]
+      s, e = 0, 0
+      while s < nGridPnt:
+        e = min(nGridPnt-s, batchSize)
 
-      # Shift time range to start at zero
-      if resetTime:
-        t[:,0] -= self.startFrame
-        if UT.PRINT_DEBUG:
-          print('Start frame: {}'.format(self.startFrame))
+        # Arrays to store batches
+        xy = np.zeros((e, self.dim),     dtype=float)
+        t  = np.zeros((e, 1),            dtype=float)
+        uv = np.zeros((e, self.dim + 1), dtype=float)
+        id = np.zeros((e, 1),            dtype=float)
 
-      # Zero mean for time range (use -1 to account for 0 in center)
-      if zeroMean:
-        print(self.nTotalFrames)
-        xy[:,0] -= (self.size[0]-1) / 2
-        xy[:,1] -= (self.size[1]-1) / 2
-        #t[:,0]  -= (self.nTotalFrames-1) / 2
+        # Fill batch arrays
+        xy[0:e, :] = xytTarget[s:s+e, :self.dim]
+        t[0:e, 0]  = xytTarget[s:s+e, self.dim]
+        uv[0:e, :] = uvpTarget[s:s+e, :]
+        id[0:e, 0] = ids[s:s+e, 0]
 
-        if UT.PRINT_DEBUG:
-          print('min, max xyt[0]: [{}, {}]'.format(np.min(t[:,0]), np.max(t[:,0])))
-          print('min, max xyt[1]: [{}, {}]'.format(np.min(xy[:,0]), np.max(xy[:,0])))
-          print('min, max xyt[2]: [{}, {}]'.format(np.min(xy[:,1]), np.max(xy[:,1])))
+        # Shift time range to start at zero
+        if resetTime:
+          t[:,0] -= self.startFrame
+          #if UT.PRINT_DEBUG:
+          #  print('Start frame: {}'.format(self.startFrame))
 
-      # Convert from domain space to world space
-      pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
-      time = UT.time_domain_to_world(t, fps)
+        # Fetch the bc xy and bc value for every point in this batch
+        idxT = np.concatenate(t.astype(int))
+        xyDataBc = self.xytDataBc[idxT, :, :2]
+        uvDataBc = self.uvpDataBc[idxT, :, :2]
+        validDataBc = self.validDataBc[idxT, :]
 
-      # Convert from world space to dimensionless quantities
-      pos  = UT.pos_world_to_dimensionless(pos, L)
-      time = UT.time_world_to_dimensionless(time, T)
+        # Shift time and position to negative range (use -1 to account for 0 in center)
+        if zeroMean:
+          print(self.nTotalFrames)
+          xy[:,:] -= (self.size-1) / 2
+          xyDataBc[:,:1] -= (self.size-1) / 2
+          #t[:,0]  -= (self.nTotalFrames-1) / 2
+          #xyDataBc[:,2]  -= (self.nTotalFrames-1) / 2
 
-      # Only non-dimensionalize velocities from flownet dataset
-      vel = uv
-      if self.source == UT.SRC_FLOWNET:
-        vel = UT.vel_domain_to_world(uv, worldSize, fps)
-        vel = UT.vel_world_to_dimensionless(vel, V)
+          if UT.PRINT_DEBUG:
+            print('min, max xyt[0]: [{}, {}]'.format(np.min(t[:,0]), np.max(t[:,0])))
+            print('min, max xyt[1]: [{}, {}]'.format(np.min(xy[:,0]), np.max(xy[:,0])))
+            print('min, max xyt[2]: [{}, {}]'.format(np.min(xy[:,1]), np.max(xy[:,1])))
 
-      dummy = vel
-      yield [pos, time, vel], dummy
+        # Convert from domain space to world space
+        pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
+        time = UT.time_domain_to_world(t, fps)
+        xyDataBc = UT.pos_domain_to_world(xyDataBc, worldSize, imageSize)
+
+        # Convert from world space to dimensionless quantities
+        pos  = UT.pos_world_to_dimensionless(pos, L)
+        time = UT.time_world_to_dimensionless(time, T)
+        xyDataBc = UT.pos_world_to_dimensionless(xyDataBc, L)
+
+        # Only non-dimensionalize velocities from flownet dataset
+        vel = uv
+        if self.source == UT.SRC_FLOWNET:
+          vel = UT.vel_domain_to_world(uv, worldSize, fps)
+          vel = UT.vel_world_to_dimensionless(vel, V)
+
+        print('Feeding batch from {} to {}'.format(s, s+e))
+        s += e
+
+        dummy = vel
+        if hardBc:
+          yield [pos, time, vel, xyDataBc, uvDataBc, validDataBc], dummy
+        else:
+          yield [pos, time, vel], dummy
 
 
   def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=True, zeroMean=True, initialCondition=False):

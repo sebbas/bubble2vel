@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 import argparse
 import copy
+import math
 
 import bdataset as BD
 import bmodel as BM
@@ -46,6 +47,7 @@ args.architecture.append(UT.nDim + 1)
 
 dataSet = BD.BubbleDataSet()
 dataSet.restore(args.file)
+dataSet.prepare_hard_boundary_condition()
 
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg)
 bubbleNet.load_weights(tf.train.latest_checkpoint(args.name)).expect_partial()
@@ -54,8 +56,9 @@ size                   = dataSet.get_size()
 source                 = dataSet.get_source()
 sourceName             = dataSet.get_source_name()
 numPredFrames          = args.predFrames
-startFrame, endFrame   = args.startFrame, args.endFrame
-cmin, cmax             = 0.0, 3.0
+startFrame             = args.startFrame
+endFrame               = startFrame + numPredFrames
+cmin, cmax             = 0, 1.5
 cmap                   = 'jet'
 relErrULst, relErrVLst = [], []
 

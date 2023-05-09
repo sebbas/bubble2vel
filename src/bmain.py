@@ -63,13 +63,15 @@ parser.add_argument('-p', '--patience', type=int, default=200,
 parser.add_argument('-lr',  '--restartLr', type=float, default=None,
                      help='learning rate to restart training')
 
-# Numbers of data, collocation and wall points
-parser.add_argument('-b', '--nWallPnt', type=int, default=-1,
+# Numbers of data, collocation, wall points and initial condition points
+parser.add_argument('-b', '--nWallPoint', type=int, default=-1,
                     help='number of boundary points in training, use all by default')
 parser.add_argument('-c', '--nColPoint', type=int, default=-1,
                     help='number of collocation points in training')
 parser.add_argument('-d', '--nDataPoint', type=int, default=-1,
                     help='number of data points in training, use all by default')
+parser.add_argument('-i', '--nIcondPoint', type=int, default=-1,
+                    help='number of initial condition points in training')
 
 # Save more info
 parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
@@ -79,8 +81,6 @@ parser.add_argument('-src', '--source', type=int, default=0,
                     help='type of training data source, either 1: experiment or 2: simulation')
 parser.add_argument('-rt', '--resetTime', default=False, action='store_true',
                     help='start dataset time at zero')
-parser.add_argument('-ic', '--initCond', default=False, action='store_true',
-                    help='use first frame to set initial condition with MSE')
 
 args = parser.parse_args()
 
@@ -88,17 +88,20 @@ archStr = UT.get_arch_string(args.architecture)
 
 # Restore dataset with data from generated .h5 file
 assert args.file.endswith('.h5')
-dataSet = BD.BubbleDataSet(wallPoints=args.nWallPnt, \
-                           colPoints=args.nColPoint, dataPoints=args.nDataPoint)
+dataSet = BD.BubbleDataSet(wallPoints=args.nWallPoint, \
+                           colPoints=args.nColPoint, \
+                           dataPoints=args.nDataPoint, \
+                           icondPoints=args.nIcondPoint)
 dataSet.restore(args.file)
-dataSet.prepare_batch_arrays(zeroInitialCollocation=True, resetTime=args.resetTime, zeroMean=0, initialCondition=args.initCond)
+dataSet.prepare_batch_arrays(zeroInitialCollocation=True, resetTime=args.resetTime, zeroMean=False)
+dataSet.prepare_hard_boundary_condition()
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 1)
 
 # Create training and validation (data + collocation points)
-nSamples = dataSet.get_num_data_pts() + dataSet.get_num_col_pts()
-nTrain   = int(nSamples * 0.85)
+nSamples = dataSet.get_num_total_pts()
+nTrain   = int(nSamples * 0.9)
 # Ensure training samples fit evenly
 nTrain   = args.batchSize * round(nTrain / args.batchSize)
 nValid   = nSamples - nTrain
@@ -133,8 +136,7 @@ modelName = nameStr + archStr + paramsStr
 #with BM.strategy.scope():
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
-                      Re=UT.get_reynolds_number(args.source), \
-                      initialCondition=args.initCond)
+                      Re=UT.get_reynolds_number(args.source))
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 
 bubbleNet.preview()

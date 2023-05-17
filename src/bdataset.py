@@ -85,7 +85,7 @@ class BubbleDataSet:
     self.bshape = [] # Num of blocks in each dimension
 
 
-  def _load_flashx(self):
+  def _load_flashx(self, filter=True):
     assert haveBoxkit, 'Boxkit has not been imported. Cannot load FlashX data'
 
     frame = self.startFrame
@@ -140,6 +140,20 @@ class BubbleDataSet:
                 self.vel[cnt, sy, sx:ex, 1] = vely[0:self.pshape[2]]
                 self.vel[cnt, sy, sx:ex, 2] = dfun[0:self.pshape[2]]
             bcnt += 1
+
+      # Filter out the outlier velocities above a certain velocity magnitude
+      if filter:
+        velMag = np.sqrt(np.square(self.vel[:,:,:,0]) + np.square(self.vel[:,:,:,1]))
+
+        # Replace outliers (e.g. fixed value or quantile)
+        maxMag = 10.0
+        #maxMag = np.quantile(velMag[:,:,:], 0.99) # e.g. find the 0.99 quantile in all vels
+        print('Capping velocites above magnitude of {}'.format(maxMag))
+
+        # Scale velocity vectors in each dimension
+        scaleVec = np.where(velMag[:,:,:] > maxMag, maxMag / velMag[:,:,:], 1)
+        scaleVec = np.expand_dims(scaleVec, axis=-1)
+        self.vel[:,:,:,:self.dim] *= scaleVec
 
       if 0 and UT.PRINT_DEBUG:
         tempMin, tempMax = temperature[cnt].min(), temperature[cnt].max()

@@ -67,7 +67,7 @@ class BModel(keras.Model):
     '''
     xy  = inputs[0]
     t   = inputs[1]
-    uvp = inputs[2]
+    uvpBc = inputs[2]
 
     xyt = tf.concat([xy, t], axis=1)
     uvp = self.mlp(xyt)
@@ -125,7 +125,7 @@ class BModel(keras.Model):
 
       # Construct levelset for bubble boundary
       if withBubbleBc:
-        phiV = uvp[:,2]
+        phiV = uvpBc[:,2]
         phiBubble = (tf.abs(phiV) / domainSizeFull) # TODO: Add phi from bubble bc
 
       # Join domain and bubble boundary levelsets

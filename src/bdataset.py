@@ -151,7 +151,7 @@ class BubbleDataSet:
         print('Capping velocites above magnitude of {}'.format(maxMag))
 
         # Scale velocity vectors in each dimension
-        scaleVec = np.where(velMag[:,:,:] > maxMag, maxMag / velMag[:,:,:], 1)
+        scaleVec = np.where(velMag[:,:,:] > maxMag, maxMag / (velMag[:,:,:] + 1.0e-10), 1)
         scaleVec = np.expand_dims(scaleVec, axis=-1)
         self.vel[:,:,:,:self.dim] *= scaleVec
 

@@ -104,22 +104,22 @@ for f in range(0, numPredFrames):
 
   plotOrig = True
   if plotOrig:
-    uvpData  = dataSet.get_bc(f)
-    xytData  = dataSet.get_xy_bc(f)
-    uvpFluid = dataSet.get_uvp_fluid(f)
-    xytFluid = dataSet.get_xy_fluid(f)
-    uvpWalls = dataSet.get_bc_walls(f)
-    xytWalls = dataSet.get_xy_walls(f)
+    uvpBubble = dataSet.get_uvp_bubble(f)
+    xytBubble = dataSet.get_xyt_bubble(f)
+    uvpFluid  = dataSet.get_uvp_fluid(f)
+    xytFluid  = dataSet.get_xyt_fluid(f)
+    uvpWalls  = dataSet.get_uvp_walls(f)
+    xytWalls  = dataSet.get_xyt_walls(f)
 
     # Get ground truth xyt and uvp of data, collocation, and / or wall points
     xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 1))
     if args.xyPred[0]:
       # Only use points within boundaries
-      mask = dataSet.get_wall_mask(xytData)
-      xytDataMasked = xytData[mask]
-      uvpDataMasked = uvpData[mask]
-      xytOrig = np.concatenate((xytOrig, xytDataMasked))
-      uvpOrig = np.concatenate((uvpOrig, uvpDataMasked))
+      mask = dataSet.get_wall_mask(xytBubble)
+      xytBubbleMasked = xytBubble[mask]
+      uvpBubbleMasked = uvpBubble[mask]
+      xytOrig = np.concatenate((xytOrig, xytBubbleMasked))
+      uvpOrig = np.concatenate((uvpOrig, uvpBubbleMasked))
     if args.xyPred[1]:
       # Only use points within boundaries
       mask = dataSet.get_wall_mask(xytFluid)

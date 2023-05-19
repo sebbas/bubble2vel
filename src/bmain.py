@@ -64,13 +64,13 @@ parser.add_argument('-lr',  '--restartLr', type=float, default=None,
                      help='learning rate to restart training')
 
 # Numbers of data, collocation, wall points and initial condition points
-parser.add_argument('-b', '--nWallPoint', type=int, default=-1,
+parser.add_argument('-wa', '--nWallPoint', type=int, default=-1,
                     help='number of boundary points in training, use all by default')
-parser.add_argument('-c', '--nColPoint', type=int, default=-1,
+parser.add_argument('-co', '--nColPoint', type=int, default=-1,
                     help='number of collocation points in training')
-parser.add_argument('-d', '--nDataPoint', type=int, default=-1,
+parser.add_argument('-if', '--nIfacePoint', type=int, default=-1,
                     help='number of data points in training, use all by default')
-parser.add_argument('-i', '--nIcondPoint', type=int, default=-1,
+parser.add_argument('-ic', '--nIcondPoint', type=int, default=-1,
                     help='number of initial condition points in training')
 
 # Save more info
@@ -90,7 +90,7 @@ archStr = UT.get_arch_string(args.architecture)
 assert args.file.endswith('.h5')
 dataSet = BD.BubbleDataSet(wallPoints=args.nWallPoint, \
                            colPoints=args.nColPoint, \
-                           dataPoints=args.nDataPoint, \
+                           ifacePoints=args.nIfacePoint, \
                            icondPoints=args.nIcondPoint)
 dataSet.restore(args.file)
 dataSet.prepare_batch_arrays(resetTime=args.resetTime, zeroMean=False)
@@ -127,7 +127,7 @@ nameStr, paramsStr = args.name, ''
 if args.name is None:
   nameStr = UT.MODEL_NAME
   paramsStr = '_d{}_c{}_a{}_b{}_g{}_lr{}_p{}'.format( \
-    dataSet.get_num_data_pts(), dataSet.get_num_col_pts(), \
+    dataSet.get_num_iface_pts(), dataSet.get_num_col_pts(), \
     UT.get_list_string(args.alpha, delim='-'), \
     UT.get_list_string(args.beta, delim='-'), \
     UT.get_list_string(args.gamma, delim='-'), args.lr0, args.patience)

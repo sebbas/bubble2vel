@@ -26,7 +26,7 @@ class BubbleDataSet:
   FLAG_VISITED = 1
 
   def __init__(self, fName='', startFrame=0, endFrame=399, dim=2, \
-               wallPoints=-1, colPoints=-1, dataPoints=-1, icondPoints=-1, walls=[1,1,1,1], \
+               wallPoints=-1, colPoints=-1, ifacePoints=-1, icondPoints=-1, walls=[1,1,1,1], \
                interface=1, source=UT.SRC_FLOWNET):
     assert dim == 2, "Only supporting 2D datasets"
     self.fName        = fName
@@ -42,42 +42,42 @@ class BubbleDataSet:
     self.sourceName   = ''
     self.phiInit      = 99 # Initial levelset value
     # Lists to count number of cells per frame
-    self.nBcBubble = []
-    self.nFluid    = []
-    self.nWalls    = []
+    self.nBubble = []
+    self.nFluid     = []
+    self.nWalls     = []
     # Requested number of points
-    self.nColPnt  = colPoints
-    self.nWallPnt = wallPoints
-    self.nDataPnt = dataPoints
+    self.nColPnt   = colPoints
+    self.nWallPnt  = wallPoints
+    self.nIfacePnt = ifacePoints
     self.nIcondPnt = icondPoints
     # Array to store ground truth data (after processing .flo input)
     self.vel      = None # [frames, width, height, dim + 1]
     # Arrays to store processed data (after processing ground truth)
-    self.bc       = None # [nSamples, dim + 1]
-    self.xyBc     = None # [nSamples, dim + 1]
-    self.xyFluid  = None # [nSamples, dim + 1]
-    self.uvpFluid = None # [nSamples, dim + 1]
-    self.bcDomain = None # [nSamples, dim + 1]
-    self.xyDomain = None # [nSamples, dim + 1]
-    self.idDomain = None # [nSamples]
+    self.uvpBubble = None # [nSamples, dim + 1]
+    self.xytBubble = None # [nSamples, dim + 1]
+    self.xytFluid  = None # [nSamples, dim + 1]
+    self.uvpFluid  = None # [nSamples, dim + 1]
+    self.uvpDomain = None # [nSamples, dim + 1]
+    self.xytDomain = None # [nSamples, dim + 1]
+    self.idDomain  = None # [nSamples]
     # Arrays to store selection of points
-    self.xyCol    = None # [nColPnt,  dim + 1]
+    self.xytCol   = None # [nColPnt,  dim + 1]
     self.uvpCol   = None # [nColPnt,  dim + 1]
-    self.xyData   = None # [nDataPnt, dim + 1]
-    self.uvData   = None # [nDataPnt, dim + 1]
-    self.xyWalls  = None # [nWallPnt, dim + 1]
-    self.uvWalls  = None # [nWallPnt, dim + 1]
+    self.xytIface = None # [nIfacePnt, dim + 1]
+    self.uvpIface = None # [nIfacePnt, dim + 1]
+    self.xytWalls = None # [nWallPnt, dim + 1]
+    self.uvpWalls = None # [nWallPnt, dim + 1]
     self.idWalls  = None # [nWallPnt]
-    self.xyIcond  = None # [nIcondPnt, dim + 1]
-    self.uvIcond  = None # [nIcondPnt, dim + 1]
+    self.xytIcond = None # [nIcondPnt, dim + 1]
+    self.uvpIcond = None # [nIcondPnt, dim + 1]
     # Arrays to store boundary condition per frame
-    self.xytDataBc    = None # [nTotalFrames, max(nBcBubble), dim + 1]
-    self.uvpDataBc    = None # [nTotalFrames, max(nBcBubble), dim + 1]
-    self.validDataBc  = None # [nTotalFrames, max(nWalls)]
+    self.xytDataBc   = None # [nTotalFrames, max(nBubble), dim + 1]
+    self.uvpDataBc   = None # [nTotalFrames, max(nBubble), dim + 1]
+    self.validDataBc = None # [nTotalFrames, max(nWalls) + max(nBubble)]
     # Arrays to store (shuffled) mix of data and collocation points
-    self.labels   = None
-    self.xyt      = None
-    self.id       = None
+    self.uvpBatch = None
+    self.xytBatch = None
+    self.idBatch  = None
     # Resolution of collocation points (only use every other points as col point)
     self.colRes = 1
     # FlashX
@@ -308,24 +308,24 @@ class BubbleDataSet:
     print('Generating prediction points')
 
     for f in range(begin, end):
-      uvpData  = self.get_bc(f)
-      xytData  = self.get_xy_bc(f)
-      uvpFluid = self.get_uvp_fluid(f)
-      xytFluid = self.get_xy_fluid(f)
-      uvpWalls = self.get_bc_walls(f)
-      xytWalls = self.get_xy_walls(f)
+      uvpBubble = self.get_uvp_bubble(f)
+      xytBubble = self.get_xyt_bubble(f)
+      uvpFluid  = self.get_uvp_fluid(f)
+      xytFluid  = self.get_xyt_fluid(f)
+      uvpWalls  = self.get_uvp_walls(f)
+      xytWalls  = self.get_xyt_walls(f)
 
-      # Get ground truth xyt and uvp of data, collocation, and / or wall points
+      # Get ground truth xyt and uvp of bubble, fluid, and / or domain points
       xytTarget, uvpTarget, ids = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, 1))
       if xyPred[0]:
         # Only use points within boundaries
-        mask = self.get_wall_mask(xytData)
-        xytDataMasked = xytData[mask]
-        uvpDataMasked = uvpData[mask]
-        xytTarget = np.concatenate((xytTarget, xytDataMasked))
-        uvpTarget = np.concatenate((uvpTarget, uvpDataMasked))
-        dataIds = np.full((len(xytDataMasked), 1), 1)
-        ids     = np.concatenate((ids, dataIds))
+        mask = self.get_wall_mask(xytBubble)
+        xytBubbleMasked = xytBubble[mask]
+        uvpBubbleMasked = uvpBubble[mask]
+        xytTarget = np.concatenate((xytTarget, xytBubbleMasked))
+        uvpTarget = np.concatenate((uvpTarget, uvpBubbleMasked))
+        bubbleIds = np.full((len(xytBubbleMasked), 1), 1)
+        ids       = np.concatenate((ids, bubbleIds))
       if xyPred[1]:
         # Only use points within boundaries
         mask = self.get_wall_mask(xytFluid)
@@ -416,79 +416,79 @@ class BubbleDataSet:
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
 
-    # Extract selection of data points (otherwise use all)
-    useAllDataPts = (self.nDataPnt < 0)
-    self.select_data_points(useAllDataPts)
+    # Extract selection of interface points (otherwise use all)
+    useAll = (self.nIfacePnt < 0)
+    self.select_iface_points(useAll)
 
     # Extract selection of collocation points
-    useDefaultColPts = (self.nColPnt < 0)
-    self.select_collocation_points(useDefaultColPts)
+    useDefault = (self.nColPnt < 0)
+    self.select_collocation_points(useDefault)
 
     # Extract selection of wall points (otherwise use all)
-    useAllWallPts = (self.nWallPnt < 0)
-    self.select_wall_points(useAllWallPts)
+    useAll = (self.nWallPnt < 0)
+    self.select_wall_points(useAll)
 
     # Extract selection of wall points (otherwise use all)
-    useDefaultIcondPts = (self.nIcondPnt < 0)
-    self.select_icond_points(useDefaultIcondPts)
+    useDefault = (self.nIcondPnt < 0)
+    self.select_icond_points(useDefault)
 
-    uvpSamples = np.concatenate((self.uvData, self.uvpCol, self.uvWalls, self.uvIcond))
-    xytSamples = np.concatenate((self.xyData, self.xyCol, self.xyWalls, self.xyIcond))
-    dataId     = np.full((len(self.xyData), 1), 1)
-    colId      = np.full((len(self.xyCol), 1), 0)
+    uvpSamples = np.concatenate((self.uvpIface, self.uvpCol, self.uvpWalls, self.uvpIcond))
+    xytSamples = np.concatenate((self.xytIface, self.xytCol, self.xytWalls, self.xytIcond))
+    ifaceId    = np.full((len(self.xytIface), 1), 1)
+    colId      = np.full((len(self.xytCol), 1), 0)
     wallId     = np.expand_dims(self.idWalls, axis=-1)
-    icondId    = np.full((len(self.xyIcond), 1), 3)
-    idSamples  = np.concatenate((dataId, colId, wallId, icondId))
+    icondId    = np.full((len(self.xytIcond), 1), 3)
+    idSamples  = np.concatenate((ifaceId, colId, wallId, icondId))
 
     assert len(uvpSamples) == len(xytSamples)
     assert len(uvpSamples) == len(idSamples)
 
     # Shuffle the combined point arrays. Shuffle all arrays with same permutation
     perm = np.random.permutation(len(uvpSamples))
-    self.labels = uvpSamples[perm]
-    self.xyt    = xytSamples[perm]
-    self.id     = idSamples[perm]
+    self.uvpBatch = uvpSamples[perm]
+    self.xytBatch = xytSamples[perm]
+    self.idBatch  = idSamples[perm]
 
-    print('min, max uvp[0]: [{}, {}]'.format(np.min(self.labels[:,0]), np.max(self.labels[:,0])))
-    print('min, max uvp[1]: [{}, {}]'.format(np.min(self.labels[:,1]), np.max(self.labels[:,1])))
-    print('min, max uvp[2]: [{}, {}]'.format(np.min(self.labels[:,2]), np.max(self.labels[:,2])))
+    print('min, max uvp[0]: [{}, {}]'.format(np.min(self.uvpBatch[:,0]), np.max(self.uvpBatch[:,0])))
+    print('min, max uvp[1]: [{}, {}]'.format(np.min(self.uvpBatch[:,1]), np.max(self.uvpBatch[:,1])))
+    print('min, max uvp[2]: [{}, {}]'.format(np.min(self.uvpBatch[:,2]), np.max(self.uvpBatch[:,2])))
 
     # Shift time range to start at zero
     if resetTime:
-      self.xyt[:,2] -= self.startFrame
+      self.xytBatch[:,2] -= self.startFrame
 
     # Zero mean for pos range (use -1 to account for 0 in center)
     if zeroMean:
-      self.xyt[:,:1] -= (self.size-1) / 2
-      #self.xyt[:,2] -= (self.nTotalFrames-1) / 2
+      self.xytBatch[:,:1] -= (self.size-1) / 2
+      #self.xytBatch[:,2] -= (self.nTotalFrames-1) / 2
 
-    print('min, max xyt[0]: [{}, {}]'.format(np.min(self.xyt[:,0]), np.max(self.xyt[:,0])))
-    print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xyt[:,1]), np.max(self.xyt[:,1])))
-    print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xyt[:,2]), np.max(self.xyt[:,2])))
+    print('min, max xyt[0]: [{}, {}]'.format(np.min(self.xytBatch[:,0]), np.max(self.xytBatch[:,0])))
+    print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xytBatch[:,1]), np.max(self.xytBatch[:,1])))
+    print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xytBatch[:,2]), np.max(self.xytBatch[:,2])))
 
-    assert len(self.labels) == len(self.xyt)
-    assert len(self.labels) == len(self.id)
+    assert len(self.uvpBatch) == len(self.xytBatch)
+    assert len(self.uvpBatch) == len(self.idBatch)
 
 
   def prepare_hard_boundary_condition(self, zeroMean=False):
     print('Preparing hard boundary condition')
 
-    # Use frame with max bc count for array dimension
-    maxInterface = np.max(self.nBcBubble)
+    # Use frame with largest interface cell count for array dimension
+    maxBubble = np.max(self.nBubble)
     maxWalls = np.max(self.nWalls)
 
     interface = 0
     walls = 1
 
     maxCells = 0
-    if interface: maxCells += maxInterface
+    if interface: maxCells += maxBubble
     if walls: maxCells += maxWalls
 
     if not maxCells:
       print('Returning early, no boundary condition points present')
       return
 
-    print('maxInterface, maxWalls: {}, {}'.format(maxInterface, maxWalls))
+    print('maxBubble, maxWalls: {}, {}'.format(maxBubble, maxWalls))
 
     # Bubble interface and domain boundary condition: [nFrames, maxCells, nDim + 1]
     self.xytDataBc = np.zeros((self.nTotalFrames, maxCells, self.dim + 1), dtype=float)
@@ -505,21 +505,21 @@ class BubbleDataSet:
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 
-      eData = self.nBcBubble[f]
+      eData = self.nBubble[f]
       eWalls = self.nWalls[f]
 
       print('nBubbles at frame {}: {}'.format(f, eData))
 
       s = 0
       if interface:
-        self.xytDataBc[f, s:eData, :] = self.get_xy_bc(f)
-        self.uvpDataBc[f, s:eData, :] = self.get_bc(f)
+        self.xytDataBc[f, s:eData, :] = self.get_xyt_bubble(f)
+        self.uvpDataBc[f, s:eData, :] = self.get_uvp_bubble(f)
         self.validDataBc[f, s:eData] = 1
-        s += maxInterface
+        s += maxBubble
 
       if walls:
-        self.xytDataBc[f, s:s+eWalls, :] = self.get_xy_walls(f)
-        self.uvpDataBc[f, s:s+eWalls, :] = self.get_bc_walls(f)
+        self.xytDataBc[f, s:s+eWalls, :] = self.get_xyt_walls(f)
+        self.uvpDataBc[f, s:s+eWalls, :] = self.get_uvp_walls(f)
         self.validDataBc[f, s:s+eWalls] = 1
 
       print(self.xytDataBc[f, :, :].shape)
@@ -533,7 +533,7 @@ class BubbleDataSet:
     generatorType = 'training' if begin == 0 else 'validation'
     UT.print_info('\nGenerating {} sample {} batches'.format(batchSize, generatorType))
 
-    # Arrays to store data + collocation + wall point batch
+    # Arrays to store iface + collocation + wall point batch
     uv     = np.zeros((batchSize, self.dim + 1), dtype=float)
     xy     = np.zeros((batchSize, self.dim), dtype=float)
     t      = np.zeros((batchSize, 1),        dtype=float)
@@ -547,11 +547,11 @@ class BubbleDataSet:
       e = s + batchSize
 
       # Fill batch arrays
-      uv[:, :self.dim] = self.labels[s:e, :self.dim]
-      phi[:, 0]        = self.labels[s:e, self.dim] # phi for now
-      xy[:, :]         = self.xyt[s:e, :self.dim]
-      t[:, 0]          = self.xyt[s:e, self.dim]
-      id[:, 0]         = self.id[s:e, 0]
+      uv[:, :self.dim] = self.uvpBatch[s:e, :self.dim]
+      phi[:, 0]        = self.uvpBatch[s:e, self.dim] # phi for now
+      xy[:, :]         = self.xytBatch[s:e, :self.dim]
+      t[:, 0]          = self.xytBatch[s:e, self.dim]
+      id[:, 0]         = self.idBatch[s:e, 0]
 
       s  += batchSize
 
@@ -590,7 +590,7 @@ class BubbleDataSet:
       yield [pos, time, vel, xyDataBc, uvDataBc, validDataBc, id, phi], dummy
 
 
-  # Define domain border locations + attach bc
+  # Define domain border locations + attach uvp at those locations
   def extract_wall_points(self, useDataBc=False):
     UT.print_info('Extracting domain wall points')
 
@@ -748,8 +748,8 @@ class BubbleDataSet:
     if UT.PRINT_DEBUG:
       print('Total number of wall samples: {}'.format(np.sum(self.nWalls)))
 
-    self.bcDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
-    self.xyDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
+    self.uvpDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
+    self.xytDomain = np.zeros((np.sum(self.nWalls), self.dim + 1))
     self.idDomain = np.zeros((np.sum(self.nWalls)), dtype=int)
 
     s = 0
@@ -763,8 +763,8 @@ class BubbleDataSet:
         uvp = np.asarray(bcFrameLst[f], dtype=float)
         xyt = np.asarray(xyFrameLst[f], dtype=float)
         ids = np.asarray(idFrameLst[f], dtype=int)
-        self.bcDomain[s:e, :] = uvp
-        self.xyDomain[s:e, :] = xyt
+        self.uvpDomain[s:e, :] = uvp
+        self.xytDomain[s:e, :] = xyt
         self.idDomain[s:e]    = ids
       s = e
 
@@ -914,13 +914,13 @@ class BubbleDataSet:
         self._thicken_interface(self.interface, flags, intersection, phi=None, fromInside=False)
 
       if UT.IMG_DEBUG:
-        UT.save_image(intersection, '{}/all'.format(self.sourceName), 'datapts_all', frame, i=self.interface)
+        UT.save_image(intersection, '{}/all'.format(self.sourceName), 'bubblepts_all', frame, i=self.interface)
         UT.save_image(mag, '{}/all'.format(self.sourceName), 'magnitude_all', frame)
         UT.save_image(curPhi, '{}/all'.format(self.sourceName), 'phi_all', frame, cmap='jet')
         if self.source == UT.SRC_FLOWNET:
           UT.save_plot(self.vel[f,:,:,2], '{}/plots'.format(self.sourceName), 'flownet_phi_plt', frame, size=self.size, cmin=np.min(curPhi), cmax=np.max(curPhi), cmap='jet')
 
-      # Add bubble border positions to xyBc list
+      # Add bubble border positions to xyBubble list
       nzIndices = np.nonzero(intersection)
       bubbleBorderIndices = list(zip(nzIndices[1], nzIndices[0])) # np.nonzero returns data in [rows, columns], ie [y,x]
       xyFrameLst.append(bubbleBorderIndices)
@@ -933,7 +933,7 @@ class BubbleDataSet:
         bcLst.append(curUvp)
       bcFrameLst.append(bcLst)
 
-      assert len(bcLst) == len(bubbleBorderIndices), 'Number of data point velocities must match number of indices'
+      assert len(bcLst) == len(bubbleBorderIndices), 'Number of bubble point velocities must match number of indices'
 
       # Create fluid mask
       exclude = flags
@@ -956,22 +956,22 @@ class BubbleDataSet:
       uvpFluidFrameLst.append(uvpLst)
 
       # Keep track of number of bubble border cells and fluid cells per frame
-      self.nBcBubble.append(len(bubbleBorderIndices))
+      self.nBubble.append(len(bubbleBorderIndices))
       self.nFluid.append(len(fluidIndices))
 
     if UT.PRINT_DEBUG:
-      print('Total number of bubble points: {}'.format(np.sum(self.nBcBubble)))
+      print('Total number of bubble points: {}'.format(np.sum(self.nBubble)))
       print('Total number of fluid points: {}'.format(np.sum(self.nFluid)))
 
     if UT.VID_DEBUG:
       UT.save_video(subdir='extract', name='flags_extract', imgDir='../img/extract/', fps=15)
-      UT.save_video(subdir='extract', name='dataPts_extract_i{:02d}'.format(self.interface), imgDir='../img/extract/', fps=15)
+      UT.save_video(subdir='extract', name='bubblePts_extract_i{:02d}'.format(self.interface), imgDir='../img/extract/', fps=15)
       UT.save_video(subdir='extract', name='magnitude_extract', imgDir='../img/extract/', fps=15)
 
     # Allocate arrays for preprocessed data ...
-    self.bc   = np.zeros((np.sum(self.nBcBubble), self.dim + 1), dtype=float) # dim + 1 for p
-    self.xyBc = np.zeros((np.sum(self.nBcBubble), self.dim + 1), dtype=float) # dim + 1 for t
-    self.xyFluid = np.zeros((np.sum(self.nFluid), self.dim + 1), dtype=float)
+    self.uvpBubble   = np.zeros((np.sum(self.nBubble), self.dim + 1), dtype=float) # dim + 1 for p
+    self.xytBubble = np.zeros((np.sum(self.nBubble), self.dim + 1), dtype=float) # dim + 1 for t
+    self.xytFluid = np.zeros((np.sum(self.nFluid), self.dim + 1), dtype=float)
     self.uvpFluid = np.zeros((np.sum(self.nFluid), self.dim + 1), dtype=float)
 
     # ... and insert data from lists
@@ -982,24 +982,24 @@ class BubbleDataSet:
 
       frame = f + self.startFrame
 
-      # Insertion of bc and xyBc lists
+      # Insertion of bc and xyBubble lists
       n = len(bcFrameLst[f])
       t = np.full((n, 1), frame, dtype=float)
       e = s + n
       if n: # only insert if there is at least 1 cell
         uvp = np.asarray(bcFrameLst[f], dtype=float)
         xy  = np.asarray(xyFrameLst[f], dtype=float)
-        self.bc[s:e, :] = uvp
-        self.xyBc[s:e, :] = np.hstack((xy, t))
+        self.uvpBubble[s:e, :] = uvp
+        self.xytBubble[s:e, :] = np.hstack((xy, t))
         if UT.IMG_DEBUG:
-          UT.save_array(self.xyBc[s:e, :], '{}/positions'.format(self.sourceName), 'xyBc_extract', frame, self.size)
+          UT.save_array(self.xytBubble[s:e, :], '{}/positions'.format(self.sourceName), 'xyBubble_extract', frame, self.size)
 
       if UT.PRINT_DEBUG:
         print('Min / max of positions')
-        print('  x ({},{}), y ({},{})'.format(np.min(self.xyBc[s:e, 0]), np.max(self.xyBc[s:e, 0]),np.min(self.xyBc[s:e, 1]), np.max(self.xyBc[s:e, 1])))
+        print('  x ({},{}), y ({},{})'.format(np.min(self.xytBubble[s:e, 0]), np.max(self.xytBubble[s:e, 0]),np.min(self.xytBubble[s:e, 1]), np.max(self.xytBubble[s:e, 1])))
       s = e
 
-      # Insertion of xyFluid list
+      # Insertion of xytFluid list
       nFl = len(xyFluidFrameLst[f])
       tFl = np.full((nFl, 1), frame, dtype=float)
       eFl = sFl + nFl
@@ -1007,68 +1007,68 @@ class BubbleDataSet:
         uvp = np.asarray(uvpFluidFrameLst[f], dtype=float)
         xy = np.asarray(xyFluidFrameLst[f], dtype=float)
         self.uvpFluid[sFl:eFl, :] = uvp
-        self.xyFluid[sFl:eFl, :] = np.hstack((xy, tFl))
+        self.xytFluid[sFl:eFl, :] = np.hstack((xy, tFl))
         if UT.IMG_DEBUG:
-          UT.save_array(self.xyFluid[sFl:eFl, :], '{}/positions'.format(self.sourceName), 'xyFluid_extract', frame, self.size)
+          UT.save_array(self.xytFluid[sFl:eFl, :], '{}/positions'.format(self.sourceName), 'xyFluid_extract', frame, self.size)
       sFl = eFl
 
     if UT.IMG_DEBUG:
-      UT.save_velocity_bins(self.bc[:, 0], '{}/histograms'.format(self.sourceName), 'bc_x_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
-      UT.save_velocity_bins(self.bc[:, 1], '{}/histograms'.format(self.sourceName), 'bc_y_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
+      UT.save_velocity_bins(self.uvpBubble[:, 0], '{}/histograms'.format(self.sourceName), 'bc_x_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
+      UT.save_velocity_bins(self.uvpBubble[:, 1], '{}/histograms'.format(self.sourceName), 'bc_y_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
 
 
-  def select_data_points(self, all=False):
-    UT.print_info('Selecting data points')
+  def select_iface_points(self, useAll=False):
+    UT.print_info('Selecting interface points')
     rng = np.random.default_rng(2022)
 
     # Use all points that are available
     if all:
-      self.xyData = copy.deepcopy(self.xyBc)
-      self.uvData = copy.deepcopy(self.bc)
+      self.xytIface = copy.deepcopy(self.xytBubble)
+      self.uvpIface = copy.deepcopy(self.uvpBubble)
 
       # Only use points within boundaries
-      mask = self.get_wall_mask(self.xyData)
-      self.xyData = self.xyData[mask]
-      self.uvData = self.uvData[mask]
+      mask = self.get_wall_mask(self.xytIface)
+      self.xytIface = self.xytIface[mask]
+      self.uvpIface = self.uvpIface[mask]
 
-      self.nDataPnt = len(self.xyData)
-      print('Using {} data points'.format(self.nDataPnt))
+      self.nIfacePnt = len(self.xytIface)
+      print('Using {} interface points'.format(self.nIfacePnt))
       return
 
     # Else, use the exact number of points that was specified
-    nDataPntPerFrame = self.nDataPnt // self.nTotalFrames
+    nIfacePntPerFrame = self.nIfacePnt // self.nTotalFrames
     # Update actual number of points
-    self.nDataPnt = nDataPntPerFrame * self.nTotalFrames
+    self.nIfacePnt = nIfacePntPerFrame * self.nTotalFrames
     # Allocate arrays based on actual number of points
-    self.xyData = np.zeros((self.nDataPnt, self.dim + 1))
-    self.uvData = np.zeros((self.nDataPnt, self.dim + 1))
+    self.xytIface = np.zeros((self.nIfacePnt, self.dim + 1))
+    self.uvpIface = np.zeros((self.nIfacePnt, self.dim + 1))
 
-    print('Using {} data points'.format(self.nDataPnt))
+    print('Using {} interface points'.format(self.nIfacePnt))
 
     s = 0
     for f in range(self.nTotalFrames):
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 
-      # Get all data point coords and vels for the current frame
-      xyDataFrame = self.get_xy_bc(f)
-      uvDataFrame = self.get_bc(f)
+      # Get all interface point coords and vels for the current frame
+      xytIfaceFrame = self.get_xyt_bubble(f)
+      uvpIfaceFrame = self.get_uvp_bubble(f)
 
       # Only use points within boundaries
-      mask = self.get_wall_mask(xyDataFrame)
-      xyDataFrameMasked = xyDataFrame[mask]
-      uvDataFrameMasked = uvDataFrame[mask]
+      mask = self.get_wall_mask(xytIfaceFrame)
+      xytIfaceFrameMasked = xytIfaceFrame[mask]
+      uvpIfaceFrameMasked = uvpIfaceFrame[mask]
 
-      # Insert random selection of data point coords into data point array
+      # Insert random selection of interface point coords into interface point array
       if UT.PRINT_DEBUG:
-        print('Taking {} data points out of {} available'.format(nDataPntPerFrame, xyDataFrame.shape[0]))
-      indices = np.arange(0, xyDataFrameMasked.shape[0])
-      randIndices = rng.choice(indices, size=nDataPntPerFrame, replace=False)
-      e = s + nDataPntPerFrame
-      self.xyData[s:e, :] = xyDataFrameMasked[randIndices, :]
-      self.uvData[s:e, :] = uvDataFrameMasked[randIndices, :]
+        print('Taking {} interface points out of {} available'.format(nIfacePntPerFrame, xytIfaceFrame.shape[0]))
+      indices = np.arange(0, xytIfaceFrameMasked.shape[0])
+      randIndices = rng.choice(indices, size=nIfacePntPerFrame, replace=False)
+      e = s + nIfacePntPerFrame
+      self.xytIface[s:e, :] = xytIfaceFrameMasked[randIndices, :]
+      self.uvpIface[s:e, :] = uvpIfaceFrameMasked[randIndices, :]
       if UT.IMG_DEBUG:
-        UT.save_array(self.xyData[s:e, :], '{}/data'.format(self.sourceName), 'datapts_select', frame, self.size)
+        UT.save_array(self.xytIface[s:e, :], '{}/interface'.format(self.sourceName), 'ifacepts_select', frame, self.size)
       s = e
 
 
@@ -1078,13 +1078,13 @@ class BubbleDataSet:
 
     # No specific number of collocation points supplied in cmd-line args
     if default:
-      self.nColPnt = self.nDataPnt * 10
+      self.nColPnt = self.nIfacePnt * 10
 
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
     # Update actual number of points
     self.nColPnt = nColPntPerFrame * self.nTotalFrames
     # Allocate array based on actual number of points
-    self.xyCol = np.zeros((self.nColPnt, self.dim + 1))
+    self.xytCol = np.zeros((self.nColPnt, self.dim + 1))
     self.uvpCol = np.zeros((self.nColPnt, self.dim + 1))
 
     print('Using {} collocation points'.format(self.nColPnt))
@@ -1099,7 +1099,7 @@ class BubbleDataSet:
       UT.print_progress(f, self.nTotalFrames)
 
       # Get all fluid coords for the current frame
-      xyFluidFrame = self.get_xy_fluid(f)
+      xyFluidFrame = self.get_xyt_fluid(f)
       uvpFluidFrame = self.get_uvp_fluid(f)
 
       # Only use every other grid point (self.colRes == interval) as collocation point
@@ -1118,7 +1118,7 @@ class BubbleDataSet:
       indices = np.arange(0, xyFluidFrameMasked.shape[0])
       randIndices = rng.choice(indices, size=nColPntPerFrame, replace=False)
       e = s + nColPntPerFrame
-      self.xyCol[s:e, :] = xyFluidFrameMasked[randIndices, :]
+      self.xytCol[s:e, :] = xyFluidFrameMasked[randIndices, :]
       self.uvpCol[s:e, :] = uvpFluidFrameMasked[randIndices, :]
       s = e
 
@@ -1132,17 +1132,17 @@ class BubbleDataSet:
 
     # No specific number of icond points supplied in cmd-line args
     if default:
-      self.nIcondPnt = self.nDataPnt * 2
+      self.nIcondPnt = self.nIfacePnt * 2
 
     # Allocate array based on actual number of points
-    self.xyIcond = np.zeros((self.nIcondPnt, self.dim + 1))
-    self.uvIcond = np.zeros((self.nIcondPnt, self.dim + 1))
+    self.xytIcond = np.zeros((self.nIcondPnt, self.dim + 1))
+    self.uvpIcond = np.zeros((self.nIcondPnt, self.dim + 1))
 
     # Get all fluid coords for 1st frame
     f = 0
     frame = f + self.startFrame
 
-    xyFluidFrame = self.get_xy_fluid(f)
+    xyFluidFrame = self.get_xyt_fluid(f)
     uvpFluidFrame = self.get_uvp_fluid(f)
 
     # Only use every other grid point (self.colRes == interval) as collocation point
@@ -1162,24 +1162,24 @@ class BubbleDataSet:
     randIndices = rng.choice(indices, size=self.nIcondPnt, replace=False)
     s = 0
     e = s + self.nIcondPnt
-    self.xyIcond[s:e, :] = xyFluidFrameMasked[randIndices, :]
-    self.uvIcond[s:e, :] = uvpFluidFrameMasked[randIndices, :]
+    self.xytIcond[s:e, :] = xyFluidFrameMasked[randIndices, :]
+    self.uvpIcond[s:e, :] = uvpFluidFrameMasked[randIndices, :]
     s = e
 
     if UT.IMG_DEBUG:
       UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/icond'.format(self.sourceName), 'icondpts_select', frame, self.size)
 
 
-  def select_wall_points(self, all=False):
+  def select_wall_points(self, useAll=False):
     UT.print_info('Selecting wall points')
     rng = np.random.default_rng(2022)
 
     # Use all points that are available
     if all:
-      self.xyWalls = copy.deepcopy(self.xyDomain)
-      self.uvWalls = copy.deepcopy(self.bcDomain)
+      self.xytWalls = copy.deepcopy(self.xytDomain)
+      self.uvpWalls = copy.deepcopy(self.uvpDomain)
       self.idWalls = copy.deepcopy(self.idDomain)
-      self.nWallPnt = len(self.xyWalls)
+      self.nWallPnt = len(self.xytWalls)
       print('Using {} wall points'.format(self.nWallPnt))
       return
 
@@ -1188,8 +1188,8 @@ class BubbleDataSet:
     # Update actual number of points
     self.nWallPnt = nWallsPntPerFrame * self.nTotalFrames
     # Allocate arrays based on actual number of points
-    self.xyWalls = np.zeros((self.nWallPnt, self.dim + 1))
-    self.uvWalls = np.zeros((self.nWallPnt, self.dim + 1))
+    self.xytWalls = np.zeros((self.nWallPnt, self.dim + 1))
+    self.uvpWalls = np.zeros((self.nWallPnt, self.dim + 1))
     self.idWalls = np.zeros((self.nWallPnt))
 
     print('Using {} wall points'.format(self.nWallPnt))
@@ -1203,31 +1203,31 @@ class BubbleDataSet:
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 
-      # Get all data point coords and vels for the current frame
-      xyWallsFrame = self.get_xy_walls(f)
-      uvWallsFrame = self.get_bc_walls(f)
+      # Get all wall point coords and vels for the current frame
+      xytWallsFrame = self.get_xyt_walls(f)
+      uvpWallsFrame = self.get_uvp_walls(f)
       idWallsFrame = self.get_id_walls(f)
 
-      # Insert random selection of data point coords into data point array
+      # Insert random selection of wall point coords into wall point array
       if UT.PRINT_DEBUG:
-        print('Taking {} wall points out of {} available'.format(nWallsPntPerFrame, xyWallsFrame.shape[0]))
-      indices = np.arange(0, xyWallsFrame.shape[0])
+        print('Taking {} wall points out of {} available'.format(nWallsPntPerFrame, xytWallsFrame.shape[0]))
+      indices = np.arange(0, xytWallsFrame.shape[0])
       randIndices = rng.choice(indices, size=nWallsPntPerFrame, replace=False)
       e = s + nWallsPntPerFrame
-      self.xyWalls[s:e, :] = xyWallsFrame[randIndices, :]
-      self.uvWalls[s:e, :] = uvWallsFrame[randIndices, :]
+      self.xytWalls[s:e, :] = xytWallsFrame[randIndices, :]
+      self.uvpWalls[s:e, :] = uvpWallsFrame[randIndices, :]
       self.idWalls[s:e]    = idWallsFrame[randIndices]
       s = e
 
       if UT.IMG_DEBUG:
-        UT.save_array(xyWallsFrame[randIndices, :], '{}/wall'.format(self.sourceName), 'wallpts_select', frame, self.size)
+        UT.save_array(xytWallsFrame[randIndices, :], '{}/wall'.format(self.sourceName), 'wallpts_select', frame, self.size)
 
 
   def save(self, dir='../data/', filePrefix='bdata'):
     if not os.path.exists(dir):
       os.makedirs(dir)
 
-    nSampleBc     = np.sum(self.nBcBubble)
+    nSampleBubble = np.sum(self.nBubble)
     nSampleFluid  = np.sum(self.nFluid)
     nSampleWalls  = np.sum(self.nWalls)
 
@@ -1242,7 +1242,7 @@ class BubbleDataSet:
     dFile.attrs['interface']    = self.interface
     dFile.attrs['source']       = self.source
     dFile.attrs['sourceName']   = self.sourceName
-    dFile.attrs['nBcBubble']    = np.asarray(self.nBcBubble)
+    dFile.attrs['nBubble']      = np.asarray(self.nBubble)
     dFile.attrs['nFluid']       = np.asarray(self.nFluid)
     dFile.attrs['nWalls']       = np.asarray(self.nWalls)
 
@@ -1250,18 +1250,18 @@ class BubbleDataSet:
     comp_type = 'gzip'
     comp_level = 9
 
-    dFile.create_dataset('bc', (nSampleBc, self.dim + 1), compression=comp_type,
-                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.bc)
-    dFile.create_dataset('xyBc', (nSampleBc, self.dim + 1), compression=comp_type,
-                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyBc)
+    dFile.create_dataset('uvpBubble', (nSampleBubble, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.uvpBubble)
+    dFile.create_dataset('xytBubble', (nSampleBubble, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xytBubble)
     dFile.create_dataset('uvpFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
                           compression_opts=comp_level, dtype='float64', chunks=True, data=self.uvpFluid)
-    dFile.create_dataset('xyFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
-                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyFluid)
-    dFile.create_dataset('bcDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
-                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.bcDomain)
-    dFile.create_dataset('xyDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
-                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xyDomain)
+    dFile.create_dataset('xytFluid', (nSampleFluid, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xytFluid)
+    dFile.create_dataset('uvpDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.uvpDomain)
+    dFile.create_dataset('xytDomain', (nSampleWalls, self.dim + 1), compression=comp_type,
+                          compression_opts=comp_level, dtype='float64', chunks=True, data=self.xytDomain)
     dFile.create_dataset('idDomain', (nSampleWalls,), compression=comp_type,
                           compression_opts=comp_level, dtype='int32', chunks=True, data=self.idDomain)
 
@@ -1282,17 +1282,17 @@ class BubbleDataSet:
     self.interface    = dFile.attrs['interface']
     self.source       = dFile.attrs['source']
     self.sourceName   = dFile.attrs['sourceName']
-    self.nBcBubble    = dFile.attrs['nBcBubble']
+    self.nBubble      = dFile.attrs['nBubble']
     self.nFluid       = dFile.attrs['nFluid']
     self.nWalls       = dFile.attrs['nWalls']
 
-    self.bc       = np.array(dFile.get('bc'))
-    self.xyBc     = np.array(dFile.get('xyBc'))
-    self.uvpFluid = np.array(dFile.get('uvpFluid'))
-    self.xyFluid  = np.array(dFile.get('xyFluid'))
-    self.bcDomain = np.array(dFile.get('bcDomain'))
-    self.xyDomain = np.array(dFile.get('xyDomain'))
-    self.idDomain = np.array(dFile.get('idDomain'))
+    self.uvpBubble = np.array(dFile.get('uvpBubble'))
+    self.xytBubble = np.array(dFile.get('xytBubble'))
+    self.uvpFluid  = np.array(dFile.get('uvpFluid'))
+    self.xytFluid  = np.array(dFile.get('xytFluid'))
+    self.uvpDomain = np.array(dFile.get('uvpDomain'))
+    self.xytDomain = np.array(dFile.get('xytDomain'))
+    self.idDomain  = np.array(dFile.get('idDomain'))
 
     self.isLoaded = True
     self.nTotalFrames = self.endFrame - self.startFrame + 1
@@ -1309,8 +1309,8 @@ class BubbleDataSet:
     return self.nWallPnt
 
 
-  def get_num_data_pts(self):
-    return self.nDataPnt
+  def get_num_iface_pts(self):
+    return self.nIfacePnt
 
 
   def get_num_col_pts(self):
@@ -1319,7 +1319,7 @@ class BubbleDataSet:
 
   def get_num_total_pts(self):
     return self.get_num_icond_pts() + self.get_num_wall_pts() + \
-           self.get_num_data_pts() + self.get_num_col_pts()
+           self.get_num_iface_pts() + self.get_num_col_pts()
 
 
   def get_num_fluid(self, fromFrame, toFrame):
@@ -1349,28 +1349,28 @@ class BubbleDataSet:
   def get_source_name(self):
     return self.sourceName
 
-  def get_xy_bc(self, f):
-    s = sum(self.nBcBubble[:f])
-    e = s + self.nBcBubble[f]
-    return self.xyBc[s:e, ...]
+  def get_xyt_bubble(self, f):
+    s = sum(self.nBubble[:f])
+    e = s + self.nBubble[f]
+    return self.xytBubble[s:e, ...]
 
 
-  def get_xy_fluid(self, f):
+  def get_xyt_fluid(self, f):
     s = sum(self.nFluid[:f])
     e = s + self.nFluid[f]
-    return self.xyFluid[s:e, ...]
+    return self.xytFluid[s:e, ...]
 
 
-  def get_xy_walls(self, f):
+  def get_xyt_walls(self, f):
     s = sum(self.nWalls[:f])
     e = s + self.nWalls[f]
-    return self.xyDomain[s:e, ...]
+    return self.xytDomain[s:e, ...]
 
 
-  def get_bc(self, f):
-    s = sum(self.nBcBubble[:f])
-    e = s + self.nBcBubble[f]
-    return self.bc[s:e, ...]
+  def get_uvp_bubble(self, f):
+    s = sum(self.nBubble[:f])
+    e = s + self.nBubble[f]
+    return self.uvpBubble[s:e, ...]
 
 
   def get_uvp_fluid(self, f):
@@ -1379,10 +1379,10 @@ class BubbleDataSet:
     return self.uvpFluid[s:e, ...]
 
 
-  def get_bc_walls(self, f):
+  def get_uvp_walls(self, f):
     s = sum(self.nWalls[:f])
     e = s + self.nWalls[f]
-    return self.bcDomain[s:e, ...]
+    return self.uvpDomain[s:e, ...]
 
 
   def get_id_walls(self, f):
@@ -1393,23 +1393,23 @@ class BubbleDataSet:
 
   '''
   def get_xy_data(self, f):
-    ptsPerFrame = (self.nDataPnt // self.nTotalFrames)
+    ptsPerFrame = (self.nIfacePnt // self.nTotalFrames)
     s = ptsPerFrame * f
     e = s + ptsPerFrame
-    return self.xyData[s:e, ...]
+    return self.xytIface[s:e, ...]
 
 
   def get_xy_col(self, f):
     ptsPerFrame = (self.nColPnt // self.nTotalFrames)
     s = ptsPerFrame * f
     e = s + ptsPerFrame
-    return self.xyCol[s:e, ...]
+    return self.xytCol[s:e, ...]
 
 
-  def get_xy_bcdomain(self, f):
+  def get_xy_wall(self, f):
     ptsPerFrame = (self.nWallPnt // self.nTotalFrames)
     s = ptsPerFrame * f
     e = s + ptsPerFrame
-    return self.xyDomain[s:e, ...]
+    return self.xytDomain[s:e, ...]
   '''
 

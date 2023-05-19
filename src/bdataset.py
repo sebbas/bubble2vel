@@ -412,7 +412,7 @@ class BubbleDataSet:
           yield [pos, time, vel], dummy
 
 
-  def prepare_batch_arrays(self, zeroInitialCollocation=False, resetTime=True, zeroMean=True, initialCondition=False):
+  def prepare_batch_arrays(self, resetTime=True, zeroMean=True):
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
 

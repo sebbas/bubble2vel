@@ -85,7 +85,7 @@ class BModel(keras.Model):
       uvBc    = inputs[4]
       validBc = inputs[5]
 
-      # Normalize to [0,1] for IWD calculation
+      # Normalize to [0,1] for IDW calculation
       xy /= domainSize
       xyBc /= domainSize
       x, y = xy[:,0], xy[:,1]

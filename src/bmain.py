@@ -81,6 +81,8 @@ parser.add_argument('-src', '--source', type=int, default=0,
                     help='type of training data source, either 1: experiment or 2: simulation')
 parser.add_argument('-rt', '--resetTime', default=False, action='store_true',
                     help='start dataset time at zero')
+parser.add_argument('-hbc', '--hardBc', default=False, action='store_true',
+                    help='use hard boundary condition instead of soft boundary condition')
 
 args = parser.parse_args()
 
@@ -136,7 +138,7 @@ modelName = nameStr + archStr + paramsStr
 #with BM.strategy.scope():
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
-                      Re=UT.get_reynolds_number(args.source))
+                      Re=UT.get_reynolds_number(args.source), hardBc=args.hardBc)
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
 
 bubbleNet.preview()

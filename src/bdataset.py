@@ -1019,7 +1019,7 @@ class BubbleDataSet:
     rng = np.random.default_rng(2022)
 
     # Use all points that are available
-    if all:
+    if useAll:
       self.xytIface = copy.deepcopy(self.xytBubble)
       self.uvpIface = copy.deepcopy(self.uvpBubble)
 
@@ -1172,7 +1172,7 @@ class BubbleDataSet:
     rng = np.random.default_rng(2022)
 
     # Use all points that are available
-    if all:
+    if useAll:
       self.xytWalls = copy.deepcopy(self.xytDomain)
       self.uvpWalls = copy.deepcopy(self.uvpDomain)
       self.idWalls = copy.deepcopy(self.idDomain)

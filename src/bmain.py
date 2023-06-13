@@ -119,10 +119,10 @@ if args.source == UT.SRC_FLASHX:
 # Generators
 trainGen = dataSet.generate_train_valid_batch(0, nTrain, \
                                               worldSize, imageSize, fps, V, L, T, \
-                                              batchSize=args.batchSize)
+                                              batchSize=args.batchSize, shuffle=False)
 validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, \
                                               worldSize, imageSize, fps, V, L, T, \
-                                              batchSize=args.batchSize)
+                                              batchSize=args.batchSize, shuffle=False)
 
 # Create model
 nameStr, paramsStr = args.name, ''

@@ -374,7 +374,7 @@ class BubbleDataSet:
         t[0:e, 0]   = xytTarget[s:s+e, self.dim]
         uv[0:e, :]  = uvpTarget[s:s+e, :self.dim]
         phi[0:e, 0] = uvpTarget[s:s+e, 2]
-        c[0:e, 0]   = uvpTarget[s:s+e, 3]
+        #c[0:e, 0]   = uvpTarget[s:s+e, 3]
 
         # Shift time range to start at zero
         if resetTime:
@@ -563,7 +563,7 @@ class BubbleDataSet:
       # Fill batch arrays
       uv[:,:]    = self.uvpBatch[s:e, :self.dim]
       phi[:,0]   = self.uvpBatch[s:e, 2]
-      c[:,0]     = self.uvpBatch[s:e, 3]
+      #c[:,0]     = self.uvpBatch[s:e, 3]
       xy[:,:]    = self.xytBatch[s:e, :self.dim]
       t[:,0]     = self.xytBatch[s:e, 2]
       id[:,0]    = self.idBatch[s:e, 0]
@@ -579,7 +579,7 @@ class BubbleDataSet:
         id   = id[perm]
         uv   = uv[perm]
         phi  = phi[perm]
-        c    = c[perm]
+        #c    = c[perm]
 
       idxT = np.concatenate(t.astype(int))
       xyDataBc = self.xytDataBc[idxT, :, :2]

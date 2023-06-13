@@ -26,7 +26,7 @@ class BubbleDataSet:
   FLAG_VISITED = 1
 
   N_IN_VAR = 3 # x, y, t
-  N_OUT_VAR = 4 # u, v, phi, scalar
+  N_OUT_VAR = 3 # u, v, phi, scalar
 
   def __init__(self, fName='', startFrame=0, endFrame=399, dim=2, \
                wallPoints=-1, colPoints=-1, ifacePoints=-1, icondPoints=-1, dataPoints=-1, \
@@ -120,7 +120,7 @@ class BubbleDataSet:
       # Only allocate arrays once (assume same dimension for every frame)
       if allocArrays:
         pressure = np.zeros((self.nTotalFrames, self.size[1], self.size[0]), dtype=float)
-        self.rawData = np.zeros((self.nTotalFrames, self.size[1], self.size[0], N_OUT_VAR), dtype=float)
+        self.rawData = np.zeros((self.nTotalFrames, self.size[1], self.size[0], self.N_OUT_VAR), dtype=float)
         allocArrays = False
       else:
         assert pressure.shape[1] == self.size[1] and pressure.shape[2] == self.size[0]
@@ -146,7 +146,7 @@ class BubbleDataSet:
                 self.rawData[cnt, sy, sx:ex, 0] = velx[0:self.pshape[2]]
                 self.rawData[cnt, sy, sx:ex, 1] = vely[0:self.pshape[2]]
                 self.rawData[cnt, sy, sx:ex, 2] = dfun[0:self.pshape[2]]
-                self.rawData[cnt, sy, sx:ex, 3] = temp[0:self.pshape[2]]
+                #self.rawData[cnt, sy, sx:ex, 3] = temp[0:self.pshape[2]]
             bcnt += 1
 
       # Filter out the outlier velocities above a certain velocity magnitude
@@ -164,10 +164,11 @@ class BubbleDataSet:
         self.rawData[:,:,:,:self.dim] *= scaleVec
 
         # Scaling c
-        thresMin = 5.0e-3
-        self.rawData[:,:,:,3] = np.where(np.abs(self.rawData[:,:,:,3]) < thresMin, 0, self.rawData[:,:,:,3])
-        #self.rawData[:,:,:,3] = np.expm1(self.rawData[:,:,:,3]) / 0.05
-        #self.rawData[:,:,:,3] = np.sqrt(np.square(self.rawData[:,:,:,0]) + np.square(self.rawData[:,:,:,1])) / 10.0
+        if 0:
+          thresMin = 5.0e-3
+          self.rawData[:,:,:,3] = np.where(np.abs(self.rawData[:,:,:,3]) < thresMin, 0, self.rawData[:,:,:,3])
+          #self.rawData[:,:,:,3] = np.expm1(self.rawData[:,:,:,3]) / 0.05
+          #self.rawData[:,:,:,3] = np.sqrt(np.square(self.rawData[:,:,:,0]) + np.square(self.rawData[:,:,:,1])) / 10.0
 
       if 0 and UT.PRINT_DEBUG:
         tempMin, tempMax = self.rawData[cnt,:,:,3].min(), self.rawData[cnt,:,:,3].max()
@@ -187,18 +188,18 @@ class BubbleDataSet:
         UT.save_image(self.rawData[cnt,:,:,0], '{}/raw'.format(self.sourceName), 'flashx_velx_raw', frame, cmap='hot')
         UT.save_image(self.rawData[cnt,:,:,1], '{}/raw'.format(self.sourceName), 'flashx_vely_raw', frame, cmap='hot')
         UT.save_image(self.rawData[cnt,:,:,2], '{}/raw'.format(self.sourceName), 'flashx_phi_raw', frame, cmap='jet', vmin=-0.5, vmax=0.5)
-        UT.save_image(self.rawData[cnt,:,:,3], '{}/raw'.format(self.sourceName), 'flashx_temp_raw', frame, cmap='jet', vmin=0.0, vmax=5.0)
+        #UT.save_image(self.rawData[cnt,:,:,3], '{}/raw'.format(self.sourceName), 'flashx_temp_raw', frame, cmap='jet', vmin=0.0, vmax=5.0)
         # Velocity matplotlib plots
         UT.save_velocity(self.rawData[cnt], '{}/plots'.format(self.sourceName), 'flashx_vel_stream', frame, size=self.size, type='stream', density=5.0)
         UT.save_velocity(self.rawData[cnt], '{}/plots'.format(self.sourceName), 'flashx_vel_vector', frame, size=self.size, type='quiver', arrow_res=8, cmin=0.0, cmax=5.0)
         # Grid matplotlib plots
         UT.save_plot(pressure[cnt], '{}/plots'.format(self.sourceName), 'flashx_pres_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
         UT.save_plot(self.rawData[cnt,:,:,2], '{}/plots'.format(self.sourceName), 'flashx_phi_plt', frame, size=self.size, cmin=-1.0, cmax=1.0, cmap='jet')
-        UT.save_plot(self.rawData[cnt,:,:,3], '{}/plots'.format(self.sourceName), 'flashx_temp_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
+        #UT.save_plot(self.rawData[cnt,:,:,3], '{}/plots'.format(self.sourceName), 'flashx_temp_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
         # Distribution velocities in bins
         UT.save_velocity_bins(self.rawData[cnt,:,:,0], '{}/histograms'.format(self.sourceName), 'flashx_velx_bins', frame, bmin=-1.0, bmax=1.0, bstep=0.05)
         UT.save_velocity_bins(self.rawData[cnt,:,:,1], '{}/histograms'.format(self.sourceName), 'flashx_vely_bins', frame, bmin=-1.0, bmax=1.0, bstep=0.05)
-        UT.save_velocity_bins(self.rawData[cnt,:,:,3], '{}/histograms'.format(self.sourceName), 'flashx_temp_bins', frame, bmin=0, bmax=1.0, bstep=0.05)
+        #UT.save_velocity_bins(self.rawData[cnt,:,:,3], '{}/histograms'.format(self.sourceName), 'flashx_temp_bins', frame, bmin=0, bmax=1.0, bstep=0.05)
 
       # Next array index
       cnt += 1
@@ -234,7 +235,7 @@ class BubbleDataSet:
 
       # Only allocate arrays once (assume same dimension for every frame)
       if allocArrays:
-        self.rawData = np.zeros((self.nTotalFrames, sizeFromFile[1], sizeFromFile[0], N_OUT_VAR), dtype=float)
+        self.rawData = np.zeros((self.nTotalFrames, sizeFromFile[1], sizeFromFile[0], self.N_OUT_VAR), dtype=float)
         # Initialize 3rd dimension with negative phi init value
         self.rawData[:,:,:,2] = -1.0 * self.phiInit
         allocArrays = False
@@ -302,7 +303,7 @@ class BubbleDataSet:
     print('  u    {}, {}'.format(np.amin(self.rawData[:,:,:,0]), np.amax(self.rawData[:,:,:,0])))
     print('  v    {}, {}'.format(np.amin(self.rawData[:,:,:,1]), np.amax(self.rawData[:,:,:,1])))
     print('  phi  {}, {}'.format(np.amin(self.rawData[:,:,:,2]), np.amax(self.rawData[:,:,:,2])))
-    print('  temp {}, {}'.format(np.amin(self.rawData[:,:,:,3]), np.amax(self.rawData[:,:,:,3])))
+    #print('  temp {}, {}'.format(np.amin(self.rawData[:,:,:,3]), np.amax(self.rawData[:,:,:,3])))
     print('--------------------------------')
 
 
@@ -462,7 +463,7 @@ class BubbleDataSet:
     print('min, max uvp[0]: [{}, {}]'.format(np.min(self.uvpBatch[:,0]), np.max(self.uvpBatch[:,0])))
     print('min, max uvp[1]: [{}, {}]'.format(np.min(self.uvpBatch[:,1]), np.max(self.uvpBatch[:,1])))
     print('min, max uvp[2]: [{}, {}]'.format(np.min(self.uvpBatch[:,2]), np.max(self.uvpBatch[:,2])))
-    print('min, max uvp[3]: [{}, {}]'.format(np.min(self.uvpBatch[:,3]), np.max(self.uvpBatch[:,3])))
+    #print('min, max uvp[3]: [{}, {}]'.format(np.min(self.uvpBatch[:,3]), np.max(self.uvpBatch[:,3])))
 
     # Shift time range to start at zero
     if resetTime:

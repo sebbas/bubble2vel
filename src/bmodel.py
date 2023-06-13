@@ -4,22 +4,22 @@ import tensorflow as tf
 import numpy as np
 import math
 
-np.random.seed(2022)
-tf.random.set_seed(2022)
-
 from tensorflow import keras
 from blayers import *
 
 import butils as UT
+
+np.random.seed(2022)
+tf.random.set_seed(2022)
 
 ''' --- TODO ---
 strategy = tf.distribute.MirroredStrategy()
 '''
 
 class BModel(keras.Model):
-  def __init__(self, width=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 3],\
-               alpha=[1.0, 1.0, 0.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0],\
-               reg=None, saveGradStat=False, Re=3.5e4, initialCondition=False, **kwargs):
+  def __init__(self, width=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 3], \
+               alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0], delta=[1.0], \
+               reg=None, saveGradStat=False, Re=1.0e3, Pe=5.0, initialCondition=False, **kwargs):
     super(BModel, self).__init__(**kwargs)
     print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \
           alpha, beta, gamma, Re))

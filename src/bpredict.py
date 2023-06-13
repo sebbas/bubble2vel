@@ -36,6 +36,8 @@ parser.add_argument('-e', '--endFrame', type=int, default=100,
                     help='last frame to predict')
 parser.add_argument('-f', '--file', default='../data/bdata.h5',
                     help='the file(s) containing flow velocity training data')
+parser.add_argument('-fs', '--fileState', default='../data/bstates_384_1.h5',
+                    help='file containing velocity state')
 
 args = parser.parse_args()
 
@@ -43,10 +45,11 @@ assert args.name is not None, 'Must supply model name'
 assert args.startFrame <= args.endFrame, 'Start frame must be smaller/equal than/to end frame'
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(UT.nDim + 1)
+args.architecture.append(UT.nDim + 1) # u,v,p
 
 dataSet = BD.BubbleDataSet()
 dataSet.restore(args.file)
+dataSet.restoreState(args.fileState)
 dataSet.prepare_hard_boundary_condition()
 
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg)
@@ -73,6 +76,7 @@ predGen = dataSet.generate_predict_pts(0, numPredFrames, worldSize, imageSize, f
 uvpPred = bubbleNet.predict(predGen)
 predVels = uvpPred[:, :UT.nDim]
 predP = copy.deepcopy(uvpPred[:, 2])
+#predC = copy.deepcopy(uvpPred[:, 3])
 
 # Convert predvels from dimensionless to world to domain space
 if source == UT.SRC_FLOWNET:
@@ -100,41 +104,42 @@ predVelOffset = 0 # just a helper var to find beginning of next frame in predVel
 for f in range(0, numPredFrames):
 
   frame = f + startFrame
+
+  uvpBubble = dataSet.get_uvp_bubble(f)
+  xytBubble = dataSet.get_xyt_bubble(f)
+  uvpFluid  = dataSet.get_uvp_fluid(f)
+  xytFluid  = dataSet.get_xyt_fluid(f)
+  uvpWalls  = dataSet.get_uvp_walls(f)
+  xytWalls  = dataSet.get_xyt_walls(f)
+
+  # Get ground truth xyt and uvp of data, collocation, and / or wall points
+  xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 2))
+  if args.xyPred[0]:
+    # Only use points within boundaries
+    mask = dataSet.get_wall_mask(xytBubble)
+    xytBubbleMasked = xytBubble[mask]
+    uvpBubbleMasked = uvpBubble[mask]
+    xytOrig = np.concatenate((xytOrig, xytBubbleMasked))
+    uvpOrig = np.concatenate((uvpOrig, uvpBubbleMasked))
+  if args.xyPred[1]:
+    # Only use points within boundaries
+    mask = dataSet.get_wall_mask(xytFluid)
+    xytFluidMasked = xytFluid[mask]
+    uvpFluidMasked = uvpFluid[mask]
+    xytOrig = np.concatenate((xytOrig, xytFluidMasked))
+    uvpOrig = np.concatenate((uvpOrig, uvpFluidMasked))
+  if args.xyPred[2]:
+    xytOrig = np.concatenate((xytOrig, xytWalls))
+    uvpOrig = np.concatenate((uvpOrig, uvpWalls))
+
+  # Use coarser plot when plotting collocation points
+  arrow_res = 2 if not args.xyPred[1] else 8
+
   ### Original vel plots
-
-  plotOrig = True
+  plotOrig = 1
   if plotOrig:
-    uvpBubble = dataSet.get_uvp_bubble(f)
-    xytBubble = dataSet.get_xyt_bubble(f)
-    uvpFluid  = dataSet.get_uvp_fluid(f)
-    xytFluid  = dataSet.get_xyt_fluid(f)
-    uvpWalls  = dataSet.get_uvp_walls(f)
-    xytWalls  = dataSet.get_xyt_walls(f)
 
-    # Get ground truth xyt and uvp of data, collocation, and / or wall points
-    xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 1))
-    if args.xyPred[0]:
-      # Only use points within boundaries
-      mask = dataSet.get_wall_mask(xytBubble)
-      xytBubbleMasked = xytBubble[mask]
-      uvpBubbleMasked = uvpBubble[mask]
-      xytOrig = np.concatenate((xytOrig, xytBubbleMasked))
-      uvpOrig = np.concatenate((uvpOrig, uvpBubbleMasked))
-    if args.xyPred[1]:
-      # Only use points within boundaries
-      mask = dataSet.get_wall_mask(xytFluid)
-      xytFluidMasked = xytFluid[mask]
-      uvpFluidMasked = uvpFluid[mask]
-      xytOrig = np.concatenate((xytOrig, xytFluidMasked))
-      uvpOrig = np.concatenate((uvpOrig, uvpFluidMasked))
-    if args.xyPred[2]:
-      xytOrig = np.concatenate((xytOrig, xytWalls))
-      uvpOrig = np.concatenate((uvpOrig, uvpWalls))
-
-    # Use coarser plot when plotting collocation points
-    arrow_res = 2 if not args.xyPred[1] else 8
-
-    origvelGrid = np.zeros((size[0], size[1], UT.nDim + 1))
+    origvelGrid = np.zeros((size[0], size[1], UT.nDim + 2))
     origvelMag  = np.zeros((size))
 
     for xyt, uvp in zip(xytOrig, uvpOrig):
@@ -150,9 +155,13 @@ for f in range(0, numPredFrames):
       print('origvel u [{}, {}], v [{}, {}]'.format( \
             np.min(origvelGrid[:,:,0]), np.max(origvelGrid[:,:,0]), \
             np.min(origvelGrid[:,:,1]), np.max(origvelGrid[:,:,1])))
+      print('orig velmag [{}, {}]'.format(np.min(origvelMag[:,:]), np.max(origvelMag[:,:])))
+      print('orig phi [{}, {}]'.format(np.min(origvelGrid[:,:,2]), np.max(origvelGrid[:,:,2])))
+      #print('orig concentration [{}, {}]'.format(np.min(origvelGrid[:,:,3]), np.max(origvelGrid[:,:,3])))
 
-    UT.save_plot(origvelMag, '{}/origvels/plots'.format(sourceName), 'origvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax, cmap=cmap)
+    UT.save_plot(origvelMag, '{}/origvels/plots'.format(sourceName), 'origvelsmag_plt', frame, size=size, cmin=0, cmax=3, cmap=cmap)
     UT.save_plot(origvelGrid[:,:,2], '{}/origvels/plots'.format(sourceName), 'origphi_plt', frame, size=size, cmin=-1.0, cmax=1.0, cmap='jet')
+    #UT.save_plot(origvelGrid[:,:,3], '{}/origvels/plots'.format(sourceName), 'origc_plt', frame, size=size, cmin=0.0, cmax=0.1, cmap='jet')
 
     UT.save_velocity(origvelGrid, '{}/origvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')
     UT.save_velocity(origvelGrid, '{}/origvels/plots'.format(sourceName), 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, cmin=cmin, cmax=cmax, filterZero=True)
@@ -164,6 +173,7 @@ for f in range(0, numPredFrames):
     predvelGrid = np.zeros((size[0], size[1], UT.nDim))
     predvelMag  = np.zeros((size))
     predPGrid   = np.zeros((size))
+    #predCGrid   = np.zeros((size))
 
     cnt = 0
     for xyt in xytOrig:
@@ -173,6 +183,7 @@ for f in range(0, numPredFrames):
       predvelMag[yi, xi] = np.sqrt(np.square(vel[0]) + np.square(vel[1]))
       predvelGrid[yi, xi] = vel
       predPGrid[yi, xi] = predP[cnt + predVelOffset]
+      #predCGrid[yi, xi] = predC[cnt + predVelOffset]
       cnt += 1
 
     # Start of the predvels of next frame
@@ -191,6 +202,7 @@ for f in range(0, numPredFrames):
 
     UT.save_image(predvelMag, '{}/predvels/raw'.format(sourceName), 'predvels_raw', frame)
     UT.save_image(predPGrid, '{}/predvels/raw'.format(sourceName), 'predp_raw', frame)
+    #UT.save_image(predCGrid, '{}/predvels/raw'.format(sourceName), 'predc_raw', frame)
 
     if UT.PRINT_DEBUG:
       print('predvel u [{}, {}], v [{}, {}]'.format( \
@@ -198,9 +210,11 @@ for f in range(0, numPredFrames):
             np.min(predvelGrid[:,:,1]), np.max(predvelGrid[:,:,1])))
       print('pred velmag [{}, {}]'.format(np.min(predvelMag[:,:]), np.max(predvelMag[:,:])))
       print('pred pressure [{}, {}]'.format(np.min(predPGrid[:,:]), np.max(predPGrid[:,:])))
+      #print('pred concentration [{}, {}]'.format(np.min(predCGrid[:,:]), np.max(predCGrid[:,:])))
 
-    UT.save_plot(predvelMag, '{}/predvels/plots'.format(sourceName), 'predvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax, cmap=cmap)
-    UT.save_plot(predPGrid, '{}/predvels/plots'.format(sourceName), 'predp_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(predvelMag, '{}/predvels/plots'.format(sourceName), 'predvelsmag_plt', frame, size=size, cmin=0, cmax=3, cmap=cmap)
+    UT.save_plot(predPGrid, '{}/predvels/plots'.format(sourceName), 'predp_plt', frame, size=size, cmin=-0.1, cmax=0.1)
+    #UT.save_plot(predCGrid, '{}/predvels/plots'.format(sourceName), 'predc_plt', frame, size=size, cmin=-0, cmax=0.1, cmap='jet')
 
     UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')
     UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, filterZero=True)

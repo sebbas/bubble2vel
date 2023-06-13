@@ -34,16 +34,20 @@ parser.add_argument('-w', '--walls', type=int, nargs=4, default=[0,0,1,0],
 # Regularizer coefficients
 parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
                     help='l2 regularization')
-parser.add_argument('-alpha', '--alpha', type=float, nargs=3, default=[1.0, 1.0, 0.0],
+parser.add_argument('-alpha', '--alpha', type=float, nargs=2, default=[1.0, 1.0],
                     help='coefficients for data loss')
-parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-2, 1e-2, 1e-2],
+parser.add_argument('-beta', '--beta', type=float, nargs=4, default=[1e-2, 1e-2, 1e-2, 1e-2],
                     help='coefficients for pde residual')
 parser.add_argument('-gamma', '--gamma', type=float, nargs=3, default=[1e-4, 1e-4, 1e-4],
                     help='coefficients for domain wall loss')
+parser.add_argument('-delta', '--delta', type=float, nargs=1, default=[1.0],
+                    help='coefficients for concentration loss')
 
 # Epochs, checkpoints
 parser.add_argument('-f', '--file', default='../data/bdata_512_56389.h5',
                     help='file containing training and validation points')
+parser.add_argument('-fs', '--fileState', default='../data/bstates_384_1.h5',
+                    help='file containing velocity state')
 parser.add_argument('-n', '--name', default=None, \
                     help='use custom model name, by default one will be generated based on params')
 parser.add_argument('-ie', '--initTrain', type=int, default=0,
@@ -72,6 +76,8 @@ parser.add_argument('-if', '--nIfacePoint', type=int, default=-1,
                     help='number of data points in training, use all by default')
 parser.add_argument('-ic', '--nIcondPoint', type=int, default=-1,
                     help='number of initial condition points in training')
+parser.add_argument('-da', '--nDataPoint', type=int, default=-1,
+                    help='number of data points in training')
 
 # Save more info
 parser.add_argument('-g', '--saveGradStat', default=False, action='store_true',
@@ -91,22 +97,25 @@ assert args.file.endswith('.h5')
 dataSet = BD.BubbleDataSet(wallPoints=args.nWallPoint, \
                            colPoints=args.nColPoint, \
                            ifacePoints=args.nIfacePoint, \
-                           icondPoints=args.nIcondPoint)
+                           icondPoints=args.nIcondPoint, \
+                           dataPoints=args.nDataPoint)
 dataSet.restore(args.file)
+dataSet.restoreState(args.fileState)
+
 dataSet.prepare_batch_arrays(resetTime=args.resetTime, zeroMean=False)
 dataSet.prepare_hard_boundary_condition()
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(UT.nDim + 1)
+args.architecture.append(UT.nDim + 1) # u,v,p
 
-# Create training and validation (data + collocation points)
+# Create training and validation sets
 nSamples = dataSet.get_num_total_pts()
 nTrain   = int(nSamples * 0.9)
 # Ensure training samples fit evenly
 nTrain   = args.batchSize * round(nTrain / args.batchSize)
 nValid   = nSamples - nTrain
 
-print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
+print('{} points in training, {} in validation'.format(nTrain, nValid))
 
 assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 if args.source == UT.SRC_FLOWNET:
@@ -134,10 +143,10 @@ if args.name is None:
 modelName = nameStr + archStr + paramsStr
 
 #with BM.strategy.scope():
-bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
-                      alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
-                      Re=UT.get_reynolds_number(args.source))
-bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
+bubbleNet = BM.BModel(width=args.architecture, reg=args.reg, \
+                      alpha=args.alpha, beta=args.beta, gamma=args.gamma, delta=args.delta, \
+                      Re=UT.Re_fx, Pe=UT.Pe_fx)
+bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))#, run_eagerly=True)
 
 bubbleNet.preview()
 

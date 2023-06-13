@@ -47,7 +47,9 @@ fps_fx       = 125
 worldSize_fx = 0.0168 # 16.8 millimeters
 # Domain space quantities
 imageSize_fx = 384
-
+# Prandtl and Peclet numbers
+Pr_fx = 8.4
+Pe_fx = Re_fx * Pr_fx # Pe definition in heat transfer problems
 
 def _ensure_exists(dir):
   if not os.path.exists(dir):

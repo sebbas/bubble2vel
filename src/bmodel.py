@@ -35,7 +35,9 @@ class BModel(keras.Model):
     self.alpha = alpha
     self.beta  = beta
     self.gamma = gamma
+    self.delta = delta
     self.Re    = Re
+    self.Pe    = Pe
     self.initialCondition = initialCondition
     # ---- dicts for metrics and statistics ---- #
     # Save gradients' statistics per layer
@@ -44,7 +46,7 @@ class BModel(keras.Model):
     self.trainMetrics = {}
     self.validMetrics = {}
     # add metrics
-    names = ['loss', 'uMse', 'vMse', 'pMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'pMae', 'uMseWalls', 'vMseWalls', 'pMseWalls']
+    names = ['loss', 'uMse', 'vMse', 'cMse', 'pde0', 'pde1', 'pde2', 'pde3', 'uMae', 'vMae', 'cMae', 'uMseWalls', 'vMseWalls', 'pMseWalls']
     for key in names:
       self.trainMetrics[key] = keras.metrics.Mean(name='train_'+key)
       self.validMetrics[key] = keras.metrics.Mean(name='valid_'+key)
@@ -52,7 +54,7 @@ class BModel(keras.Model):
     ## i even for weights, odd for bias
     if self.saveGradStat:
       for i in range(len(width)):
-        for prefix in ['u_', 'v_', 'p_', 'pde0_', 'pde1_', 'pde2_', 'uWalls_', 'vWalls_', 'pWalls_']:
+        for prefix in ['u_', 'v_', 'c_', 'pde0_', 'pde1_', 'pde2_', 'pde3_', 'uWalls_', 'vWalls_', 'pWalls_']:
           for suffix in ['w_avg', 'w_std', 'b_avg', 'b_std']:
             key = prefix + repr(i) + suffix
             self.trainMetrics[key] = keras.metrics.Mean(name='train '+key)
@@ -63,13 +65,14 @@ class BModel(keras.Model):
 
   def call(self, inputs, training=False):
     '''
-    inputs: [xy, t, uvp]
+    inputs: [xy, t, state, uvp]
     '''
-    xy  = inputs[0]
-    t   = inputs[1]
-    uvpBc = inputs[2]
+    xy    = inputs[0]
+    t     = inputs[1]
+    state = inputs[2]
+    vel   = inputs[3]
 
-    xyt = tf.concat([xy, t], axis=1)
+    xyt  = tf.concat([xy, t, state], axis=1)
     uvp = self.mlp(xyt)
 
     # The dimensionless size of a single pixel and the domain
@@ -81,9 +84,9 @@ class BModel(keras.Model):
     # Reproduces exact values in boundary and filter networks effects near boundaries
     withHardBc = 1
     if withHardBc:
-      xyBc    = inputs[3]
-      uvBc    = inputs[4]
-      validBc = inputs[5]
+      xyBc    = inputs[4]
+      uvBc    = inputs[5]
+      validBc = inputs[6]
 
       # Normalize to [0,1] for IDW calculation
       xy /= domainSize
@@ -125,18 +128,20 @@ class BModel(keras.Model):
 
       # Construct levelset for bubble boundary
       if withBubbleBc:
-        phiV = uvpBc[:,2]
+        phiV = inputs[8]
         phiBubble = (tf.abs(phiV) / domainSizeFull) # TODO: Add phi from bubble bc
 
       # Join domain and bubble boundary levelsets
       phi = tf.math.minimum(phiBubble, phiWalls)
 
       # Assemble g and phi with uvp
-      uv, p = uvp[:,:2], uvp[:,2]
+      uv, p = uvp[:,:2], uvp[:,2]#, uvp[:,3]
       phi   = tf.expand_dims(phi, axis=-1)
       uv    = g + uv * phi                 # [nBatch, nDim]
       p     = tf.expand_dims(p, axis=-1)   # [nBatch, 1]
-      uvp   = tf.concat([uv, p], axis=-1)  # [nBatch, nDim + 1]
+
+      uvp  = tf.concat([uv, p], axis=-1)  # [nBatch, nDim + 1]
+      #uvp  = tf.concat([uv, p, c], axis=-1)  # [nBatch, nDim + 1]
 
     return uvp
 
@@ -158,27 +163,36 @@ class BModel(keras.Model):
         self.trainMetrics[prefix+'std'].update_state(gStd)
 
 
-  def compute_losses(self, xy, t, w, phi, uv, xyBc, uvBc, validBc):
-    # Track computation for 2nd derivatives for u, v
+  def compute_losses(self, xy, t, w, phi, c, state, uv, xyBc, uvBc, validBc):
+
+    cTrue = tf.squeeze(tf.transpose(c))
+
+    # Track computation for 2nd derivatives
     with tf.GradientTape(watch_accessed_variables=False,persistent=True) as tape2:
       tape2.watch(xy)
+      # Track computation for 1st derivatives
       with tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape1, \
            tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape0:
         tape1.watch(xy)
         tape0.watch(t)
-        uvpPred = self([xy, t, uv, xyBc, uvBc, validBc, w, phi], training=True)
+        uvpPred = self([xy, t, state, uv, xyBc, uvBc, validBc, w, phi, c], training=True)
         uPred   = uvpPred[:,0]
         vPred   = uvpPred[:,1]
         pPred   = uvpPred[:,2]
+        #cPred   = uvpPred[:,3]
+
       # 1st order derivatives
       u_grad = tape1.gradient(uPred, xy)
       v_grad = tape1.gradient(vPred, xy)
       p_grad = tape1.gradient(pPred, xy)
+      #c_grad = tape1.gradient(cPred, xy)
       u_x, u_y = u_grad[:,0], u_grad[:,1]
       v_x, v_y = v_grad[:,0], v_grad[:,1]
       p_x, p_y = p_grad[:,0], p_grad[:,1]
+      #c_x, c_y = c_grad[:,0], c_grad[:,1]
       u_t = tape0.gradient(uPred, t)
       v_t = tape0.gradient(vPred, t)
+      #c_t = tape0.gradient(cPred, t)
       del tape1
       del tape0
     # 2nd order derivatives
@@ -186,29 +200,42 @@ class BModel(keras.Model):
     u_yy = tape2.gradient(u_y, xy)[:,1]
     v_xx = tape2.gradient(v_x, xy)[:,0]
     v_yy = tape2.gradient(v_y, xy)[:,1]
+    #c_xx = tape2.gradient(c_x, xy)[:,0]
+    #c_yy = tape2.gradient(c_y, xy)[:,1]
     del tape2
 
-    # Compute data loss
+    # Must match shape of u_x, u_y, ...
+    u_t = tf.squeeze(tf.transpose(u_t))
+    v_t = tf.squeeze(tf.transpose(v_t))
+    #c_t = tf.squeeze(tf.transpose(c_t))
+
+    # Ensure id array has no redundant dims
     w = tf.squeeze(w)
-    dataMask = tf.cast(tf.equal(w, 1), tf.float32)
+
+    # Compute data loss
+    dataMask = tf.cast(tf.equal(w, 4), tf.float32)
     nDataPoint = tf.reduce_sum(dataMask) + 1.0e-10
-    uMse = tf.reduce_sum(tf.square(uv[:,0] - uPred) * dataMask) / nDataPoint
-    vMse = tf.reduce_sum(tf.square(uv[:,1] - vPred) * dataMask) / nDataPoint
-    pMse = tf.reduce_sum(tf.square(uv[:,2] - pPred) * dataMask) / nDataPoint
+    cMse = 0#tf.reduce_sum(tf.square(cTrue - cPred) * dataMask) / nDataPoint
+
+    # Compute interface loss
+    ifaceMask = tf.cast(tf.equal(w, 1), tf.float32)
+    nIfacePoint = tf.reduce_sum(ifaceMask) + 1.0e-10
+    uMse = tf.reduce_sum(tf.square(uv[:,0] - uPred) * ifaceMask) / nIfacePoint
+    vMse = tf.reduce_sum(tf.square(uv[:,1] - vPred) * ifaceMask) / nIfacePoint
 
     # Compute PDE loss (2D Navier Stokes: 0 continuity, 1-2 momentum)
     pdeTrue = 0.0
-    Re      = self.Re
+    Re, Pe  = self.Re, self.Pe
     pde0    = u_x + v_y
-    pde1    = tf.transpose(u_t) + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
-    pde2    = tf.transpose(v_t) + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
+    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
+    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
+    #pde3    = c_t + uPred*c_x + vPred*c_y       - (1/Pe)*(c_xx + c_yy)
 
     # Add initial condition loss to data loss
     initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
     nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
     uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * initCondMask) / nInitCondPoint
     vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * initCondMask) / nInitCondPoint
-    pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * initCondMask) / nInitCondPoint
 
     # Compute PDE loss
     colMask = tf.cast(tf.equal(w, 0), tf.float32)
@@ -216,6 +243,7 @@ class BModel(keras.Model):
     pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
     pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
     pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
+    pdeMse3 = 0 #tf.reduce_sum(tf.square(pdeTrue - pde3) * dataMask) / nDataPoint
 
     # Compute domain wall loss for velocity
     wallMask = tf.cast(tf.equal(w, 20), tf.float32)  # left
@@ -235,39 +263,43 @@ class BModel(keras.Model):
     pressureTrue = 0
     pMseWalls = tf.reduce_sum(tf.square(pressureTrue - pPred) * wallMask) / nWallsPoint
 
-    return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
+    return uvpPred, uMse, vMse, cMse, pdeMse0, pdeMse1, pdeMse2, pdeMse3, uMseWalls, vMseWalls, pMseWalls
 
 
   def train_step(self, data):
     # A batch of points has ...
     xy      = data[0][0] # xy positions
     t       = data[0][1] # timestamps
-    uv      = data[0][2] # uv velocities
-    xyBc    = data[0][3] # xy positions of all bc points
-    uvBc    = data[0][4] # uv velocities of all bc points
-    validBc = data[0][5] # binary value indicating if bc points is valid
-    w       = data[0][6] # id of the point (e.g. collocation, wall, ...)
-    phi     = data[0][7] # SDF value
+    state   = data[0][2] # velocity state vector
+    uv      = data[0][3] # uv velocities
+    xyBc    = data[0][4] # xy positions of all bc points
+    uvBc    = data[0][5] # uv velocities of all bc points
+    validBc = data[0][6] # binary value indicating if bc points is valid
+    w       = data[0][7] # id of the point (e.g. collocation, wall, ...)
+    phi     = data[0][8] # SDF value
+    c       = data[0][9] # concentration scalar
 
     with tf.GradientTape(persistent=True) as tape0:
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
-      uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-        self.compute_losses(xy, t, w, phi, uv, xyBc, uvBc, validBc)
+      uvpPred, uMse, vMse, cMse, pdeMse0, pdeMse1, pdeMse2, pdeMse3, uMseWalls, vMseWalls, pMseWalls = \
+        self.compute_losses(xy, t, w, phi, c, state, uv, xyBc, uvBc, validBc)
       # replica's loss, divided by global batch size
-      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
-              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
-              + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
+      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
+              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 + self.beta[3]*pdeMse3 \
+              + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
+              + self.delta[0]*cMse)
       loss += tf.add_n(self.losses)
       loss  = loss #/ strategy.num_replicas_in_sync
     # update gradients
     if self.saveGradStat:
       uMseGrad      = tape0.gradient(uMse,      self.trainable_variables)
       vMseGrad      = tape0.gradient(vMse,      self.trainable_variables)
-      pMseGrad      = tape0.gradient(pMse,      self.trainable_variables)
+      cMseGrad      = tape0.gradient(cMse,      self.trainable_variables)
       pdeMse0Grad   = tape0.gradient(pdeMse0,   self.trainable_variables)
       pdeMse1Grad   = tape0.gradient(pdeMse1,   self.trainable_variables)
       pdeMse2Grad   = tape0.gradient(pdeMse2,   self.trainable_variables)
+      pdeMse3Grad   = tape0.gradient(pdeMse3,   self.trainable_variables)
       uMseWallsGrad = tape0.gradient(uMseWalls, self.trainable_variables)
       vMseWallsGrad = tape0.gradient(vMseWalls, self.trainable_variables)
       pMseWallsGrad = tape0.gradient(pMseWalls, self.trainable_variables)
@@ -282,29 +314,43 @@ class BModel(keras.Model):
     self.trainMetrics['loss'].update_state(loss)#*strategy.num_replicas_in_sync)
     self.trainMetrics['uMse'].update_state(uMse)
     self.trainMetrics['vMse'].update_state(vMse)
-    self.trainMetrics['pMse'].update_state(pMse)
+    self.trainMetrics['cMse'].update_state(cMse)
     self.trainMetrics['pde0'].update_state(pdeMse0)
     self.trainMetrics['pde1'].update_state(pdeMse1)
     self.trainMetrics['pde2'].update_state(pdeMse2)
+    self.trainMetrics['pde3'].update_state(pdeMse3)
     self.trainMetrics['uMseWalls'].update_state(uMseWalls)
     self.trainMetrics['vMseWalls'].update_state(vMseWalls)
     self.trainMetrics['pMseWalls'].update_state(pMseWalls)
+
     w = tf.squeeze(w)
-    nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
-    vMae = tf.reduce_sum(tf.abs((uvpPred[:,1] - uv[:,1]) * w)) / nDataPoint
-    pMae = tf.reduce_sum(tf.abs((uvpPred[:,2] - uv[:,2]) * w)) / nDataPoint
+    ifaceMask = tf.cast(tf.equal(w, 1), tf.float32)
+    initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
+    uvMask = ifaceMask + initCondMask
+    nIfacePoint = tf.reduce_sum(ifaceMask) + 1.0e-10
+    nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
+    nUvPoints = nIfacePoint + nInitCondPoint
+    uMae = tf.reduce_sum(tf.abs((uv[:,0] - uvpPred[:,0]) * uvMask)) / nUvPoints
+    vMae = tf.reduce_sum(tf.abs((uv[:,1] - uvpPred[:,1]) * uvMask)) / nUvPoints
+
+    #dataMask = tf.cast(tf.equal(w, 4), tf.float32)
+    #nDataPoint = tf.reduce_sum(dataMask) + 1.0e-10
+    #cPred = uvpPred[:,3]
+    #cTrue = tf.squeeze(tf.transpose(c))
+    cMae = 0#tf.reduce_sum(tf.abs((cTrue - cPred) * dataMask)) / nDataPoint
+
     self.trainMetrics['uMae'].update_state(uMae)
     self.trainMetrics['vMae'].update_state(vMae)
-    self.trainMetrics['pMae'].update_state(pMae)
+    self.trainMetrics['cMae'].update_state(cMae)
     # track gradients coefficients
     if self.saveGradStat:
       self.record_layer_gradient(uMseGrad, 'u_')
       self.record_layer_gradient(vMseGrad, 'v_')
-      self.record_layer_gradient(pMseGrad, 'p_')
+      self.record_layer_gradient(cMseGrad, 'c_')
       self.record_layer_gradient(pdeMse0Grad, 'pde0_')
       self.record_layer_gradient(pdeMse1Grad, 'pde1_')
       self.record_layer_gradient(pdeMse2Grad, 'pde2_')
+      self.record_layer_gradient(pdeMse3Grad, 'pde3_')
       self.record_layer_gradient(uMseWallsGrad, 'uWalls_')
       self.record_layer_gradient(vMseWallsGrad, 'vWalls_')
       self.record_layer_gradient(pMseWallsGrad, 'pWalls_')
@@ -316,40 +362,56 @@ class BModel(keras.Model):
   def test_step(self, data):
     xy      = data[0][0]
     t       = data[0][1]
-    uv      = data[0][2]
-    xyBc    = data[0][3]
-    uvBc    = data[0][4]
-    validBc = data[0][5]
-    w       = data[0][6]
-    phi     = data[0][7]
+    state   = data[0][2]
+    uv      = data[0][3]
+    xyBc    = data[0][4]
+    uvBc    = data[0][5]
+    validBc = data[0][6]
+    w       = data[0][7]
+    phi     = data[0][8]
+    c       = data[0][9]
 
     # Compute the data and pde losses
-    uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-      self.compute_losses(xy, t, w, phi, uv, xyBc, uvBc, validBc)
+    uvpPred, uMse, vMse, cMse, pdeMse0, pdeMse1, pdeMse2, pdeMse3, uMseWalls, vMseWalls, pMseWalls = \
+      self.compute_losses(xy, t, w, phi, c, state, uv, xyBc, uvBc, validBc)
     # replica's loss, divided by global batch size
-    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
-            + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
-            + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls )
+    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse \
+            + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 + self.beta[3]*pdeMse3 \
+            + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
+            + self.delta[0]*cMse)
 
     # Track loss and mae
     self.validMetrics['loss'].update_state(loss)
     self.validMetrics['uMse'].update_state(uMse)
     self.validMetrics['vMse'].update_state(vMse)
-    self.validMetrics['pMse'].update_state(pMse)
+    self.validMetrics['cMse'].update_state(cMse)
     self.validMetrics['pde0'].update_state(pdeMse0)
     self.validMetrics['pde1'].update_state(pdeMse1)
     self.validMetrics['pde2'].update_state(pdeMse2)
+    self.validMetrics['pde3'].update_state(pdeMse3)
     self.validMetrics['uMseWalls'].update_state(uMseWalls)
     self.validMetrics['vMseWalls'].update_state(vMseWalls)
     self.validMetrics['pMseWalls'].update_state(pMseWalls)
+
     w = tf.squeeze(w)
-    nDataPoint = tf.reduce_sum(w) + 1.0e-10
-    uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
-    vMae = tf.reduce_sum(tf.abs((uvpPred[:,1] - uv[:,1]) * w)) / nDataPoint
-    pMae = tf.reduce_sum(tf.abs((uvpPred[:,2] - uv[:,2]) * w)) / nDataPoint
+    ifaceMask = tf.cast(tf.equal(w, 1), tf.float32)
+    initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
+    uvMask = ifaceMask + initCondMask
+    nIfacePoint = tf.reduce_sum(ifaceMask) + 1.0e-10
+    nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
+    nUvPoints = nIfacePoint + nInitCondPoint
+    uMae = tf.reduce_sum(tf.abs((uv[:,0] - uvpPred[:,0]) * uvMask)) / nUvPoints
+    vMae = tf.reduce_sum(tf.abs((uv[:,1] - uvpPred[:,1]) * uvMask)) / nUvPoints
+
+    #dataMask = tf.cast(tf.equal(w, 4), tf.float32)
+    #nDataPoint = tf.reduce_sum(dataMask) + 1.0e-10
+    #cPred = uvpPred[:,3]
+    #cTrue = tf.squeeze(tf.transpose(c))
+    cMae = 0#tf.reduce_sum(tf.abs((cTrue - cPred) * dataMask)) / nDataPoint
+
     self.validMetrics['uMae'].update_state(uMae)
     self.validMetrics['vMae'].update_state(vMae)
-    self.validMetrics['pMae'].update_state(pMae)
+    self.validMetrics['cMae'].update_state(cMae)
 
     for key in self.validMetrics:
       self.validStat[key] = self.validMetrics[key].result()
@@ -385,10 +447,12 @@ class BModel(keras.Model):
     #print(self.width)
     print('Layer regularization: {}'.format(self.reg))
     #print(self.reg)
-    print('Coefficients for data loss {} {} {}'.format(\
-          self.alpha[0], self.alpha[1], self.alpha[2]))
-    print('Coefficients for pde residual {} {} {}'.format(\
-          self.beta[0], self.beta[1], self.beta[2]))
+    print('Coefficients for interface loss {} {}'.format(\
+          self.alpha[0], self.alpha[1]))
+    print('Coefficients for pde residual {} {} {} {}'.format(\
+          self.beta[0], self.beta[1], self.beta[2], self.beta[3]))
     print('Coefficients for domain wall loss {} {} {}'.format(\
           self.gamma[0], self.gamma[1], self.gamma[2]))
+    print('Coefficients for data loss {}'.format(\
+          self.delta[0]))
     print('--------------------------------')

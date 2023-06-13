@@ -19,7 +19,7 @@ strategy = tf.distribute.MirroredStrategy()
 class BModel(keras.Model):
   def __init__(self, width=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 3], \
                alpha=[1.0, 1.0], beta=[1e-2, 1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0], delta=[1.0], \
-               reg=None, saveGradStat=False, Re=1.0e3, Pe=5.0, initialCondition=False, **kwargs):
+               reg=None, saveGradStat=False, Re=1.0e3, Pe=5.0, hardBc=False, **kwargs):
     super(BModel, self).__init__(**kwargs)
     print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \
           alpha, beta, gamma, Re))
@@ -38,7 +38,7 @@ class BModel(keras.Model):
     self.delta = delta
     self.Re    = Re
     self.Pe    = Pe
-    self.initialCondition = initialCondition
+    self.hardBc = hardBc
     # ---- dicts for metrics and statistics ---- #
     # Save gradients' statistics per layer
     self.saveGradStat = saveGradStat
@@ -82,8 +82,7 @@ class BModel(keras.Model):
 
     # Use hard boundary condition
     # Reproduces exact values in boundary and filter networks effects near boundaries
-    withHardBc = 1
-    if withHardBc:
+    if self.hardBc:
       xyBc    = inputs[4]
       uvBc    = inputs[5]
       validBc = inputs[6]
@@ -204,7 +203,7 @@ class BModel(keras.Model):
     #c_yy = tape2.gradient(c_y, xy)[:,1]
     del tape2
 
-    # Must match shape of u_x, u_y, ...
+    # Match shape of u_x, u_y, etc (i.e. horizontal row vec)
     u_t = tf.squeeze(tf.transpose(u_t))
     v_t = tf.squeeze(tf.transpose(v_t))
     #c_t = tf.squeeze(tf.transpose(c_t))

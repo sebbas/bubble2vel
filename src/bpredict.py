@@ -38,6 +38,8 @@ parser.add_argument('-f', '--file', default='../data/bdata.h5',
                     help='the file(s) containing flow velocity training data')
 parser.add_argument('-fs', '--fileState', default='../data/bstates_384_1.h5',
                     help='file containing velocity state')
+parser.add_argument('-hbc', '--hardBc', default=False, action='store_true',
+                    help='use hard boundary condition instead of soft boundary condition')
 
 args = parser.parse_args()
 
@@ -52,7 +54,7 @@ dataSet.restore(args.file)
 dataSet.restoreState(args.fileState)
 dataSet.prepare_hard_boundary_condition()
 
-bubbleNet = BM.BModel(width=args.architecture, reg=args.reg)
+bubbleNet = BM.BModel(width=args.architecture, reg=args.reg, hardBc=args.hardBc)
 bubbleNet.load_weights(tf.train.latest_checkpoint(args.name)).expect_partial()
 
 size                   = dataSet.get_size()

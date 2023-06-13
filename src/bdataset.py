@@ -320,7 +320,7 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1e4), hardBc=True):
+  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1e4)):
     print('Generating prediction points')
 
     for f in range(begin, end):
@@ -423,10 +423,7 @@ class BubbleDataSet:
         s += e
 
         dummy = vel
-        if hardBc:
-          yield [pos, time, state, vel, xyDataBc, uvDataBc, validDataBc, id, phi, c], dummy
-        else:
-          yield [pos, time, state, vel], dummy
+        yield [pos, time, state, vel, xyDataBc, uvDataBc, validDataBc, id, phi, c], dummy
 
 
   def prepare_batch_arrays(self, resetTime=True, zeroMean=True):

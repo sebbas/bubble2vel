@@ -26,7 +26,7 @@ keras.backend.set_floatx('float32')
 parser = argparse.ArgumentParser()
 # Architecture
 parser.add_argument('-l', '--architecture', type=int, nargs='*',
-                    default=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150],
+                    default=[150, 150, 150, 150],
                     help='size of each hidden layer')
 parser.add_argument('-w', '--walls', type=int, nargs=4, default=[0,0,1,0],
                     help='domain walls, [top, right, bottom, left]')

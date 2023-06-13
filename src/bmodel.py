@@ -187,6 +187,10 @@ class BModel(keras.Model):
     v_yy = tape2.gradient(v_y, xy)[:,1]
     del tape2
 
+    # Match shape of u_x, u_y, etc (i.e. horizontal row vec)
+    u_t = tf.squeeze(tf.transpose(u_t))
+    v_t = tf.squeeze(tf.transpose(v_t))
+
     # Compute data loss
     w = tf.squeeze(w)
     dataMask = tf.cast(tf.equal(w, 1), tf.float32)

@@ -203,8 +203,8 @@ class BModel(keras.Model):
     pdeTrue = 0.0
     Re      = self.Re
     pde0    = u_x + v_y
-    pde1    = tf.transpose(u_t) + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
-    pde2    = tf.transpose(v_t) + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
+    pde1    = u_t + uPred*u_x + vPred*u_y + p_x - (1/Re)*(u_xx + u_yy)
+    pde2    = v_t + uPred*v_x + vPred*v_y + p_y - (1/Re)*(v_xx + v_yy)
 
     # Add initial condition loss to data loss
     initCondMask = tf.cast(tf.equal(w, 3), tf.float32)

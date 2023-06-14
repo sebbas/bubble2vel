@@ -110,7 +110,7 @@ class BModel(keras.Model):
 
       # Construct levelset for wall boundary
       if withWallsBc:
-        phiWalls = x * (1-x) * y * (1-y) # Filter function for all 4 domain boundaries
+        phiWalls = x * (1-x) * y # Filter function for left, right, and bottom domain boundaries
 
         # Alternative functions for phi
         # (A) Based on exp function

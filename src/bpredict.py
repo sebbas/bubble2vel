@@ -115,7 +115,7 @@ for f in range(0, numPredFrames):
   xytWalls  = dataSet.get_xyt_walls(f)
 
   # Get ground truth xyt and uvp of data, collocation, and / or wall points
-  xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 2))
+  xytOrig, uvpOrig = np.empty(shape=(0, UT.nDim + 1)), np.empty(shape=(0, UT.nDim + 1))
   if args.xyPred[0]:
     # Only use points within boundaries
     mask = dataSet.get_wall_mask(xytBubble)
@@ -141,7 +141,7 @@ for f in range(0, numPredFrames):
   plotOrig = 1
   if plotOrig:
 
-    origvelGrid = np.zeros((size[0], size[1], UT.nDim + 2))
+    origvelGrid = np.zeros((size[0], size[1], UT.nDim + 1))
     origvelMag  = np.zeros((size))
 
     for xyt, uvp in zip(xytOrig, uvpOrig):

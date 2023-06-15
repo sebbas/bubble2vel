@@ -150,6 +150,7 @@ class BubbleDataSet:
             bcnt += 1
 
       # Filter out the outlier velocities above a certain velocity magnitude
+      filter = 0
       if filter:
         velMag = np.sqrt(np.square(self.rawData[:,:,:,0]) + np.square(self.rawData[:,:,:,1]))
 

@@ -25,10 +25,10 @@ activation= 'tanh'
 descString = 'e-{}_b-{}_a-{}'.format(nEpoch, batchSize, activation)
 
 # Plot or skip: Overall loss, data loss, pde loss, wall loss, MAE, lr
-plotRows = [1, 1, 1, 1, 0, 1]
+plotRows = [1, 1, 1, 1, 1, 1]
 
 nRows = sum(plotRows)
-nColumns = 2
+nColumns = 4
 
 plt.style.use('ggplot')
 
@@ -74,7 +74,7 @@ def plot_history(s, e):
     plt.plot(hist['uMse'])
     plt.plot(hist['vMse'])
     plt.xlabel('epoch')
-    ax.title.set_text('MSE u, v')
+    ax.title.set_text('MSE Interface')
     plt.legend(['uMse', 'vMse', 'pde2'], loc='upper right')
 
     cnt += 1
@@ -83,7 +83,7 @@ def plot_history(s, e):
     plt.plot(hist['val_uMse'])
     plt.plot(hist['val_vMse'])
     plt.xlabel('epoch')
-    ax.title.set_text('val MSE u, v')
+    ax.title.set_text('val MSE Interface')
     plt.legend(['val_uMse', 'val_vMse'], loc='upper right')
 
   if plotRows[2]:
@@ -115,7 +115,7 @@ def plot_history(s, e):
     plt.plot(hist['vMseWalls'])
     #plt.plot(hist['pMseWalls'])
     plt.xlabel('epoch')
-    ax.title.set_text('MSE Walls u, v')#, p')
+    ax.title.set_text('MSE Boundary')
     plt.legend(['uMseWalls', 'vMseWalls', 'pMseWalls'], loc='upper right')
 
     cnt += 1
@@ -125,7 +125,7 @@ def plot_history(s, e):
     plt.plot(hist['val_vMseWalls'])
     #plt.plot(hist['val_pMseWalls'])
     plt.xlabel('epoch')
-    ax.title.set_text('val MSE Walls u, v')#, p')
+    ax.title.set_text('val MSE Boundary')
     plt.legend(['val_uMseWalls', 'val_vMseWalls', 'val_pMseWalls'], loc='upper right')
 
   if plotRows[4]:
@@ -135,7 +135,7 @@ def plot_history(s, e):
     plt.plot(hist['uMae'])
     plt.plot(hist['vMae'])
     plt.xlabel('epoch')
-    ax.title.set_text('MAE u, v')
+    ax.title.set_text('MAE Interface')
     plt.legend(['uMae', 'vMae'], loc='upper right')
 
     cnt += 1
@@ -144,7 +144,7 @@ def plot_history(s, e):
     plt.plot(hist['val_uMae'])
     plt.plot(hist['val_vMae'])
     plt.xlabel('epoch')
-    ax.title.set_text('val MAE u, v')
+    ax.title.set_text('val MAE Interface')
     plt.legend(['val_uMae', 'val_vMae'], loc='upper right')
 
   if plotRows[5]:

@@ -41,7 +41,7 @@ isLoaded, filePrefix = dataSet.load_data(args.source)
 if not isLoaded: sys.exit()
 
 # Extract points from dataset and store in h5
-dataSet.extract_wall_points(useDataBc=True)
+dataSet.extract_wall_points(useDataBc=False)
 dataSet.extract_fluid_points(velEps=1.0)
 dataSet.save(filePrefix=filePrefix)
 dataSet.summary()

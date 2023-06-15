@@ -25,7 +25,7 @@ activation= 'tanh'
 descString = 'e-{}_b-{}_a-{}'.format(nEpoch, batchSize, activation)
 
 # Plot or skip: Overall loss, data loss, pde loss, wall loss, MAE, lr
-plotRows = [1, 1, 1, 1, 0, 1]
+plotRows = [1, 1, 1, 1, 1, 1]
 
 nRows = sum(plotRows)
 nColumns = 2

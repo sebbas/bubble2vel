@@ -214,11 +214,11 @@ class BModel(keras.Model):
     pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * initCondMask) / nInitCondPoint
 
     # Compute PDE loss
-    colMask = tf.cast(tf.equal(w, 0), tf.float32)
-    nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
-    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
-    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
-    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
+    #colMask = tf.cast(tf.equal(w, 0), tf.float32)
+    #nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
+    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0))# * colMask) / nPdePoint
+    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1))# * colMask) / nPdePoint
+    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2))# * colMask) / nPdePoint
 
     # Compute domain wall loss for velocity
     wallMask = tf.cast(tf.equal(w, 20), tf.float32)  # left

@@ -410,21 +410,21 @@ class BubbleDataSet:
         yield [pos, time, vel, xyDataBc, uvDataBc, validDataBc], dummy
 
 
-  def prepare_batch_arrays(self, resetTime=True, zeroMean=True):
+  def prepare_batch_arrays(self, untilFrame=-1, resetTime=True, zeroMean=False):
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
 
     # Extract selection of interface points (otherwise use all)
     useAll = (self.nIfacePnt < 0)
-    self.select_iface_points(useAll)
+    self.select_iface_points(untilFrame, useAll)
 
     # Extract selection of collocation points
     useDefault = (self.nColPnt < 0)
-    self.select_collocation_points(useDefault)
+    self.select_collocation_points(untilFrame, useDefault)
 
     # Extract selection of wall points (otherwise use all)
     useAll = (self.nWallPnt < 0)
-    self.select_wall_points(useAll)
+    self.select_wall_points(untilFrame, useAll)
 
     # Extract selection of wall points (otherwise use all)
     useDefault = (self.nIcondPnt < 0)
@@ -538,10 +538,22 @@ class BubbleDataSet:
     id     = np.zeros((batchSize, 1),        dtype=float)
     phi    = np.zeros((batchSize, 1),        dtype=float)
 
+    epochCnt = 0
+    untilFrame = 0
+    nResampleRate = 10 # Resample batch arrays after this many epochs
+    self.prepare_batch_arrays(untilFrame=untilFrame, resetTime=True, zeroMean=False)
+
     s = begin
     while True:
+      # Epoch is over, reset counter and extract from beginning of batch arrays again
       if s + batchSize > end:
         s = begin
+        epochCnt += 1
+        # Training generator can resample batch arrays every n epochs
+        if generatorType == 'training' and (epochCnt % nResampleRate) == 0:
+          untilFrame = np.min(untilFrame+1, self.nTotalFrames)
+          self.prepare_batch_arrays(untilFrame=untilFrame, resetTime=True, zeroMean=False)
+
       e = s + batchSize
 
       # Fill batch arrays
@@ -1015,14 +1027,17 @@ class BubbleDataSet:
       UT.save_velocity_bins(self.uvpBubble[:, 1], '{}/histograms'.format(self.sourceName), 'bc_y_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
 
 
-  def select_iface_points(self, useAll=False):
+  def select_iface_points(self, untilFrame=-1, useAll=False):
     UT.print_info('Selecting interface points')
     rng = np.random.default_rng(2022)
 
+    if untilFrame < 0: untilFrame = self.nTotalFrames
+    numPoints = np.sum(self.nBubble[:untilFrame])
+
     # Use all points that are available
     if useAll:
-      self.xytIface = copy.deepcopy(self.xytBubble)
-      self.uvpIface = copy.deepcopy(self.uvpBubble)
+      self.xytIface = copy.deepcopy(self.xytBubble[:numPoints, :])
+      self.uvpIface = copy.deepcopy(self.uvpBubble[:numPoints, :])
 
       # Only use points within boundaries
       mask = self.get_wall_mask(self.xytIface)
@@ -1044,7 +1059,7 @@ class BubbleDataSet:
     print('Using {} interface points'.format(self.nIfacePnt))
 
     s = 0
-    for f in range(self.nTotalFrames):
+    for f in range(untilFrame):
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 
@@ -1070,13 +1085,16 @@ class BubbleDataSet:
       s = e
 
 
-  def select_collocation_points(self, default=False):
+  def select_collocation_points(self, untilFrame=-1, default=False):
     UT.print_info('Selecting collocation points')
     rng = np.random.default_rng(2022)
 
     # No specific number of collocation points supplied in cmd-line args
     if default:
       self.nColPnt = self.nIfacePnt * 10
+
+    if untilFrame < 0: untilFrame = self.nTotalFrames
+    numPoints = np.sum(self.nFluid[:untilFrame])
 
     nColPntPerFrame = self.nColPnt // self.nTotalFrames
     # Update actual number of points
@@ -1092,7 +1110,7 @@ class BubbleDataSet:
       return
 
     s = 0
-    for f in range(self.nTotalFrames):
+    for f in range(untilFrame):
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 
@@ -1168,14 +1186,17 @@ class BubbleDataSet:
       UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/icond'.format(self.sourceName), 'icondpts_select', frame, self.size)
 
 
-  def select_wall_points(self, useAll=False):
+  def select_wall_points(self, untilFrame=-1, useAll=False):
     UT.print_info('Selecting wall points')
     rng = np.random.default_rng(2022)
 
+    if untilFrame < 0: untilFrame = self.nTotalFrames
+    numPoints = np.sum(self.nWalls[:untilFrame])
+
     # Use all points that are available
     if useAll:
-      self.xytWalls = copy.deepcopy(self.xytDomain)
-      self.uvpWalls = copy.deepcopy(self.uvpDomain)
+      self.xytWalls = copy.deepcopy(self.xytDomain[:numPoints, :])
+      self.uvpWalls = copy.deepcopy(self.uvpDomain[:numPoints, :])
       self.idWalls = copy.deepcopy(self.idDomain)
       self.nWallPnt = len(self.xytWalls)
       print('Using {} wall points'.format(self.nWallPnt))
@@ -1197,7 +1218,7 @@ class BubbleDataSet:
       return
 
     s = 0
-    for f in range(self.nTotalFrames):
+    for f in range(untilFrame):
       frame = f + self.startFrame
       UT.print_progress(f, self.nTotalFrames)
 

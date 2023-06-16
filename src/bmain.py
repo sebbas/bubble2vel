@@ -95,7 +95,6 @@ dataSet = BD.BubbleDataSet(wallPoints=args.nWallPoint, \
                            ifacePoints=args.nIfacePoint, \
                            icondPoints=args.nIcondPoint)
 dataSet.restore(args.file)
-dataSet.prepare_batch_arrays(resetTime=args.resetTime, zeroMean=False)
 dataSet.prepare_hard_boundary_condition()
 
 # Ensure correct output size at end of input architecture

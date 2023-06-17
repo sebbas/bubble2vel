@@ -25,6 +25,9 @@ class BubbleDataSet:
   FLAG_BUBBLE = 1
   FLAG_VISITED = 1
 
+  N_IN_VAR = 3 # x, y, t
+  N_OUT_VAR = 3 # u, v, p
+
   def __init__(self, fName='', startFrame=0, endFrame=399, dim=2, \
                wallPoints=-1, colPoints=-1, ifacePoints=-1, icondPoints=-1, walls=[1,1,1,1], \
                interface=1, source=UT.SRC_FLASHX):
@@ -45,7 +48,7 @@ class BubbleDataSet:
     self.nBubble = []
     self.nFluid     = []
     self.nWalls     = []
-    # Requested number of points
+    # Requested number of points per frame
     self.nColPnt   = colPoints
     self.nWallPnt  = wallPoints
     self.nIfacePnt = ifacePoints
@@ -447,10 +450,6 @@ class BubbleDataSet:
     self.xytBatch = xytSamples[perm]
     self.idBatch  = idSamples[perm]
 
-    print('min, max uvp[0]: [{}, {}]'.format(np.min(self.uvpBatch[:,0]), np.max(self.uvpBatch[:,0])))
-    print('min, max uvp[1]: [{}, {}]'.format(np.min(self.uvpBatch[:,1]), np.max(self.uvpBatch[:,1])))
-    print('min, max uvp[2]: [{}, {}]'.format(np.min(self.uvpBatch[:,2]), np.max(self.uvpBatch[:,2])))
-
     # Shift time range to start at zero
     if resetTime:
       self.xytBatch[:,2] -= self.startFrame
@@ -460,9 +459,8 @@ class BubbleDataSet:
       self.xytBatch[:,:1] -= (self.size-1) / 2
       #self.xytBatch[:,2] -= (self.nTotalFrames-1) / 2
 
-    print('min, max xyt[0]: [{}, {}]'.format(np.min(self.xytBatch[:,0]), np.max(self.xytBatch[:,0])))
-    print('min, max xyt[1]: [{}, {}]'.format(np.min(self.xytBatch[:,1]), np.max(self.xytBatch[:,1])))
-    print('min, max xyt[2]: [{}, {}]'.format(np.min(self.xytBatch[:,2]), np.max(self.xytBatch[:,2])))
+    print('min, max uvp: [{}, {}]'.format(np.min(self.uvpBatch, axis=0), np.max(self.uvpBatch, axis=0)))
+    print('min, max xyt: [{}, {}]'.format(np.min(self.xytBatch, axis=0), np.max(self.xytBatch, axis=0)))
 
     assert len(self.uvpBatch) == len(self.xytBatch)
     assert len(self.uvpBatch) == len(self.idBatch)
@@ -526,9 +524,9 @@ class BubbleDataSet:
       print('min, max uvpDataBc[1]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,1]), np.max(self.uvpDataBc[f,:,1])))
 
 
-  def generate_train_valid_batch(self, begin, end, worldSize, imageSize, fps, \
-                                 V, L, T, batchSize=64, shuffle=True):
-    generatorType = 'training' if begin == 0 else 'validation'
+  def generate_train_valid_batch(self, mode, worldSize, imageSize, fps, \
+                                 V, L, T, splitRatio=0.9, batchSize=64, shuffle=True):
+    generatorType = 'training' if mode == 0 else 'validation'
     UT.print_info('\nGenerating {} sample {} batches'.format(batchSize, generatorType))
 
     # Arrays to store iface + collocation + wall point batch
@@ -539,9 +537,15 @@ class BubbleDataSet:
     phi    = np.zeros((batchSize, 1),        dtype=float)
 
     epochCnt = 0
-    untilFrame = 0
+    numFrames = 1
     nResampleRate = 10 # Resample batch arrays after this many epochs
-    self.prepare_batch_arrays(untilFrame=untilFrame, resetTime=True, zeroMean=False)
+    self.prepare_batch_arrays(untilFrame=numFrames, resetTime=True, zeroMean=False)
+
+    nTotalPoints = self.get_num_total_pts() * numFrames
+    nTrain = int(nTotalPoints * splitRatio)
+    nValid = nTotalPoints - nTrain
+    begin = 0 if mode == 0 else nTrain 
+    end   = nTrain if mode == 0 else nTotalPoints 
 
     s = begin
     while True:
@@ -550,9 +554,9 @@ class BubbleDataSet:
         s = begin
         epochCnt += 1
         # Training generator can resample batch arrays every n epochs
-        if generatorType == 'training' and (epochCnt % nResampleRate) == 0:
-          untilFrame = np.min(untilFrame+1, self.nTotalFrames)
-          self.prepare_batch_arrays(untilFrame=untilFrame, resetTime=True, zeroMean=False)
+        if mode == 0 and (epochCnt % nResampleRate) == 0:
+          numFrames = min(numFrames+1, self.nTotalFrames)
+          self.prepare_batch_arrays(untilFrame=numFrames, resetTime=True, zeroMean=False)
 
       e = s + batchSize
 
@@ -1027,219 +1031,104 @@ class BubbleDataSet:
       UT.save_velocity_bins(self.uvpBubble[:, 1], '{}/histograms'.format(self.sourceName), 'bc_y_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
 
 
-  def select_iface_points(self, untilFrame=-1, useAll=False):
-    UT.print_info('Selecting interface points')
+  def _fill_batch_arrays(self, xytTarget, uvpTarget, nFrames, nPoints, pType, idsTarget=None):
+    UT.print_info('Selecting {} points'.format(pType))
     rng = np.random.default_rng(2022)
+    s = 0
 
-    if untilFrame < 0: untilFrame = self.nTotalFrames
-    numPoints = np.sum(self.nBubble[:untilFrame])
+    for f in range(nFrames):
+      frame = f + self.startFrame
+      UT.print_progress(f, nFrames)
 
-    # Use all points that are available
+      # Get all coords for the current frame
+      if pType == 'icond' or pType == 'colloc':
+        xyt = self.get_xyt_fluid(f)
+        uvp = self.get_uvp_fluid(f)
+      elif pType == 'wall':
+        xyt = self.get_xyt_walls(f)
+        uvp = self.get_uvp_walls(f)
+        ids = self.get_ids_walls(f)
+      elif pType == 'iface':
+        xyt = self.get_xyt_bubble(f)
+        uvp = self.get_uvp_bubble(f)
+      else:
+        sys.exit('Invalid pType')
+
+      # Only use every other grid point as data point
+      mask = np.logical_and(xyt[:,0] % self.colRes == 0, xyt[:,1] % self.colRes == 0)
+      xyt = xyt[mask]
+      uvp = uvp[mask]
+
+      # Only use points within boundaries
+      if pType != 'wall':
+        mask = self.get_wall_mask(xyt)
+        xyt = xyt[mask]
+        uvp = uvp[mask]
+
+      # Insert random selection of fluid coords into data array
+      if UT.PRINT_DEBUG: print('Taking {} {} points out of {} available'.format(nPoints, pType, xyt.shape[0]))
+      indices = np.arange(0, xyt.shape[0])
+      randIndices = rng.choice(indices, size=nPoints, replace=False)
+
+      e = s + nPoints
+      xytTarget[s:e, :] = xyt[randIndices, :]
+      uvpTarget[s:e, :] = uvp[randIndices, :]
+      if idsTarget is not None:
+        idsTarget[s:e] = ids[randIndices]
+      s = e
+
+      if UT.IMG_DEBUG:
+        UT.save_array(xyt[randIndices, :], '{}/{}'.format(self.sourceName, pType), '{}_pts_select'.format(pType), frame, self.size)
+
+
+  def select_iface_points(self, numFrames=-1, useAll=False):
+    if numFrames < 0: numFrames = self.nTotalFrames
+    numPoints = np.sum(self.nBubble[:numFrames])
+
     if useAll:
       self.xytIface = copy.deepcopy(self.xytBubble[:numPoints, :])
-      self.uvpIface = copy.deepcopy(self.uvpBubble[:numPoints, :])
-
-      # Only use points within boundaries
-      mask = self.get_wall_mask(self.xytIface)
-      self.xytIface = self.xytIface[mask]
-      self.uvpIface = self.uvpIface[mask]
-
-      self.nIfacePnt = len(self.xytIface)
-      print('Using {} interface points'.format(self.nIfacePnt))
-      return
-
-    # Else, use the exact number of points that was specified
-    nIfacePntPerFrame = self.nIfacePnt // self.nTotalFrames
-    # Update actual number of points
-    self.nIfacePnt = nIfacePntPerFrame * self.nTotalFrames
-    # Allocate arrays based on actual number of points
-    self.xytIface = np.zeros((self.nIfacePnt, self.dim + 1))
-    self.uvpIface = np.zeros((self.nIfacePnt, self.dim + 1))
-
-    print('Using {} interface points'.format(self.nIfacePnt))
-
-    s = 0
-    for f in range(untilFrame):
-      frame = f + self.startFrame
-      UT.print_progress(f, self.nTotalFrames)
-
-      # Get all interface point coords and vels for the current frame
-      xytIfaceFrame = self.get_xyt_bubble(f)
-      uvpIfaceFrame = self.get_uvp_bubble(f)
-
-      # Only use points within boundaries
-      mask = self.get_wall_mask(xytIfaceFrame)
-      xytIfaceFrameMasked = xytIfaceFrame[mask]
-      uvpIfaceFrameMasked = uvpIfaceFrame[mask]
-
-      # Insert random selection of interface point coords into interface point array
-      if UT.PRINT_DEBUG:
-        print('Taking {} interface points out of {} available'.format(nIfacePntPerFrame, xytIfaceFrame.shape[0]))
-      indices = np.arange(0, xytIfaceFrameMasked.shape[0])
-      randIndices = rng.choice(indices, size=nIfacePntPerFrame, replace=False)
-      e = s + nIfacePntPerFrame
-      self.xytIface[s:e, :] = xytIfaceFrameMasked[randIndices, :]
-      self.uvpIface[s:e, :] = uvpIfaceFrameMasked[randIndices, :]
-      if UT.IMG_DEBUG:
-        UT.save_array(self.xytIface[s:e, :], '{}/interface'.format(self.sourceName), 'ifacepts_select', frame, self.size)
-      s = e
+      self.uvpIface = copy.deepcopy(self.xytBubble[:numPoints, :])
+      self.nWallPnt = len(self.xytIface)
+    else:
+      if numFrames < 0: numFrames = self.nTotalFrames
+      nPts = self.nIfacePnt * numFrames
+      self.xytIface = np.zeros((nPts, self.N_IN_VAR))
+      self.uvpIface = np.zeros((nPts, self.N_OUT_VAR))
+      self._fill_batch_arrays(self.xytIface, self.uvpIface, nFrames=numFrames, nPoints=self.nIfacePnt, pType='iface')
 
 
-  def select_collocation_points(self, untilFrame=-1, default=False):
-    UT.print_info('Selecting collocation points')
-    rng = np.random.default_rng(2022)
-
-    # No specific number of collocation points supplied in cmd-line args
-    if default:
-      self.nColPnt = self.nIfacePnt * 10
-
-    if untilFrame < 0: untilFrame = self.nTotalFrames
-    numPoints = np.sum(self.nFluid[:untilFrame])
-
-    nColPntPerFrame = self.nColPnt // self.nTotalFrames
-    # Update actual number of points
-    self.nColPnt = nColPntPerFrame * self.nTotalFrames
-    # Allocate array based on actual number of points
-    self.xytCol = np.zeros((self.nColPnt, self.dim + 1))
-    self.uvpCol = np.zeros((self.nColPnt, self.dim + 1))
-
-    print('Using {} collocation points'.format(self.nColPnt))
-
-    # Return early if no collocation points requested
-    if not self.nColPnt:
-      return
-
-    s = 0
-    for f in range(untilFrame):
-      frame = f + self.startFrame
-      UT.print_progress(f, self.nTotalFrames)
-
-      # Get all fluid coords for the current frame
-      xyFluidFrame = self.get_xyt_fluid(f)
-      uvpFluidFrame = self.get_uvp_fluid(f)
-
-      # Only use every other grid point (self.colRes == interval) as collocation point
-      mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
-      xyFluidFrameMasked = xyFluidFrame[mask]
-      uvpFluidFrameMasked = uvpFluidFrame[mask]
-
-      # Only use points within boundaries
-      mask = self.get_wall_mask(xyFluidFrameMasked)
-      xyFluidFrameMasked = xyFluidFrameMasked[mask]
-      uvpFluidFrameMasked = uvpFluidFrameMasked[mask]
-
-      # Insert random selection of fluid coords into collocation array
-      if UT.PRINT_DEBUG:
-        print('Taking {} collocation points out of {} available'.format(nColPntPerFrame, xyFluidFrameMasked.shape[0]))
-      indices = np.arange(0, xyFluidFrameMasked.shape[0])
-      randIndices = rng.choice(indices, size=nColPntPerFrame, replace=False)
-      e = s + nColPntPerFrame
-      self.xytCol[s:e, :] = xyFluidFrameMasked[randIndices, :]
-      self.uvpCol[s:e, :] = uvpFluidFrameMasked[randIndices, :]
-      s = e
-
-      if UT.IMG_DEBUG:
-        UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/collocation'.format(self.sourceName), 'colpts_select', frame, self.size)
-
-
-  def select_icond_points(self, default=False):
-    UT.print_info('Selecting initial condition points')
-    rng = np.random.default_rng(2022)
-
-    # No specific number of icond points supplied in cmd-line args
-    if default:
-      self.nIcondPnt = self.nIfacePnt * 2
-
-    # Allocate array based on actual number of points
-    self.xytIcond = np.zeros((self.nIcondPnt, self.dim + 1))
-    self.uvpIcond = np.zeros((self.nIcondPnt, self.dim + 1))
-
-    # Get all fluid coords for 1st frame
-    f = 0
-    frame = f + self.startFrame
-
-    xyFluidFrame = self.get_xyt_fluid(f)
-    uvpFluidFrame = self.get_uvp_fluid(f)
-
-    # Only use every other grid point (self.colRes == interval) as collocation point
-    mask = np.logical_and(xyFluidFrame[:,0] % self.colRes == 0, xyFluidFrame[:,1] % self.colRes == 0)
-    xyFluidFrameMasked = xyFluidFrame[mask]
-    uvpFluidFrameMasked = uvpFluidFrame[mask]
-
-    # Only use points within boundaries
-    mask = self.get_wall_mask(xyFluidFrameMasked)
-    xyFluidFrameMasked = xyFluidFrameMasked[mask]
-    uvpFluidFrameMasked = uvpFluidFrameMasked[mask]
-
-    # Insert random selection of fluid coords into icond array
-    if UT.PRINT_DEBUG:
-      print('Taking {} initial condition points out of {} available'.format(self.nIcondPnt, xyFluidFrameMasked.shape[0]))
-    indices = np.arange(0, xyFluidFrameMasked.shape[0])
-    randIndices = rng.choice(indices, size=self.nIcondPnt, replace=False)
-    s = 0
-    e = s + self.nIcondPnt
-    self.xytIcond[s:e, :] = xyFluidFrameMasked[randIndices, :]
-    self.uvpIcond[s:e, :] = uvpFluidFrameMasked[randIndices, :]
-    s = e
-
-    if UT.IMG_DEBUG:
-      UT.save_array(xyFluidFrameMasked[randIndices, :], '{}/icond'.format(self.sourceName), 'icondpts_select', frame, self.size)
-
-
-  def select_wall_points(self, untilFrame=-1, useAll=False):
-    UT.print_info('Selecting wall points')
-    rng = np.random.default_rng(2022)
-
-    if untilFrame < 0: untilFrame = self.nTotalFrames
-    numPoints = np.sum(self.nWalls[:untilFrame])
-
-    # Use all points that are available
+  def select_wall_points(self, numFrames=-1, useAll=False):
+    if numFrames < 0: numFrames = self.nTotalFrames
+    numPoints = np.sum(self.nWalls[:numFrames])
     if useAll:
       self.xytWalls = copy.deepcopy(self.xytDomain[:numPoints, :])
       self.uvpWalls = copy.deepcopy(self.uvpDomain[:numPoints, :])
       self.idWalls = copy.deepcopy(self.idDomain)
       self.nWallPnt = len(self.xytWalls)
-      print('Using {} wall points'.format(self.nWallPnt))
-      return
+    else:
+      if numFrames < 0: numFrames = self.nTotalFrames
+      nPts = self.nWallPnt * numFrames
+      self.xytWalls = np.zeros((nPts, self.N_IN_VAR))
+      self.uvpWalls = np.zeros((nPts, self.N_OUT_VAR))
+      self.idWalls = np.zeros((nPts))
+      self._fill_batch_arrays(self.xytWalls, self.uvpWalls, nFrames=numFrames, nPoints=self.nWallPnt, pType='wall', idsTarget=self.idWalls)
 
-    # Else, use the exact number of points that was specified
-    nWallsPntPerFrame = self.nWallPnt // self.nTotalFrames
-    # Update actual number of points
-    self.nWallPnt = nWallsPntPerFrame * self.nTotalFrames
-    # Allocate arrays based on actual number of points
-    self.xytWalls = np.zeros((self.nWallPnt, self.dim + 1))
-    self.uvpWalls = np.zeros((self.nWallPnt, self.dim + 1))
-    self.idWalls = np.zeros((self.nWallPnt))
 
-    print('Using {} wall points'.format(self.nWallPnt))
+  def select_collocation_points(self, numFrames=-1, default=False):
+    if default:
+      self.nColPnt = self.nIfacePnt * 10
+    nPts = self.nColPnt * numFrames
+    self.xytCol = np.zeros((nPts, self.N_IN_VAR))
+    self.uvpCol = np.zeros((nPts, self.N_OUT_VAR))
+    self._fill_batch_arrays(self.xytCol, self.uvpCol, nFrames=numFrames, nPoints=self.nColPnt, pType='colloc')
 
-    # Return early if no points requested
-    if not self.nWallPnt:
-      return
 
-    s = 0
-    for f in range(untilFrame):
-      frame = f + self.startFrame
-      UT.print_progress(f, self.nTotalFrames)
-
-      # Get all wall point coords and vels for the current frame
-      xytWallsFrame = self.get_xyt_walls(f)
-      uvpWallsFrame = self.get_uvp_walls(f)
-      idWallsFrame = self.get_id_walls(f)
-
-      # Insert random selection of wall point coords into wall point array
-      if UT.PRINT_DEBUG:
-        print('Taking {} wall points out of {} available'.format(nWallsPntPerFrame, xytWallsFrame.shape[0]))
-      indices = np.arange(0, xytWallsFrame.shape[0])
-      randIndices = rng.choice(indices, size=nWallsPntPerFrame, replace=False)
-      e = s + nWallsPntPerFrame
-      self.xytWalls[s:e, :] = xytWallsFrame[randIndices, :]
-      self.uvpWalls[s:e, :] = uvpWallsFrame[randIndices, :]
-      self.idWalls[s:e]    = idWallsFrame[randIndices]
-      s = e
-
-      if UT.IMG_DEBUG:
-        UT.save_array(xytWallsFrame[randIndices, :], '{}/wall'.format(self.sourceName), 'wallpts_select', frame, self.size)
+  def select_icond_points(self, default=False):
+    if default:
+      self.nIcondPnt = self.nIfacePnt * 2
+    self.xytIcond = np.zeros((self.nIcondPnt, self.N_IN_VAR))
+    self.uvpIcond = np.zeros((self.nIcondPnt, self.N_OUT_VAR))
+    self._fill_batch_arrays(self.xytIcond, self.uvpIcond, nFrames=1, nPoints=self.nIcondPnt, pType='icond')
 
 
   def save(self, dir='../data/', filePrefix='bdata'):
@@ -1404,7 +1293,7 @@ class BubbleDataSet:
     return self.uvpDomain[s:e, ...]
 
 
-  def get_id_walls(self, f):
+  def get_ids_walls(self, f):
     s = sum(self.nWalls[:f])
     e = s + self.nWalls[f]
     return self.idDomain[s:e]

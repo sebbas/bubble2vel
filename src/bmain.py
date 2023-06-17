@@ -116,11 +116,9 @@ if args.source == UT.SRC_FLASHX:
   worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
 # Generators
-trainGen = dataSet.generate_train_valid_batch(0, nTrain, \
-                                              worldSize, imageSize, fps, V, L, T, \
+trainGen = dataSet.generate_train_valid_batch(0, worldSize, imageSize, fps, V, L, T, \
                                               batchSize=args.batchSize, shuffle=False)
-validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, \
-                                              worldSize, imageSize, fps, V, L, T, \
+validGen = dataSet.generate_train_valid_batch(1, worldSize, imageSize, fps, V, L, T, \
                                               batchSize=args.batchSize, shuffle=False)
 
 # Create model

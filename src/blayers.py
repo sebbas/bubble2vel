@@ -6,11 +6,11 @@ import numpy as np
 np.random.seed(2022)
 tf.random.set_seed(2022)
 
-from tensorflow import keras
-from tensorflow.keras.layers import Dense
+import tensorflow.keras.layers as KL
+import tensorflow.keras.regularizers as KR
 
 
-class DenseLayers(keras.layers.Layer):
+class DenseLayers(KL.Layer):
   def __init__(self, width=[64,64,64], act='tanh', prefix='dense_',
                reg=None, last_linear=False, **kwargs):
     super(DenseLayers, self).__init__(**kwargs)
@@ -33,16 +33,29 @@ class DenseLayers(keras.layers.Layer):
       is_last = (i == len(width)-1)
       activation = 'linear' if is_last and last_linear else act
 
-      self.layers.append(keras.layers.Dense(w, activation=activation,
-                         kernel_regularizer=keras.regularizers.l2(reg[i]),
-                         name=prefix+repr(i)))
-      batchNorm = 0
-      if batchNorm:
-        self.layers.append(keras.layers.BatchNormalization(
-                           name=prefix+'batchnorm_'+repr(i)))
+      if not is_last:
+        self.layers.append(KL.Dense(w, activation=activation, kernel_initializer='glorot_normal',
+                           kernel_regularizer=KR.l2(reg[i]),
+                           name=prefix+repr(i)))
+      else:
+        self.layers.append(KL.Dense(w, activation=activation, kernel_initializer='glorot_normal',
+                           use_bias=False, kernel_regularizer=KR.l2(reg[i]),
+                           name=prefix+repr(i)))
+
 
   def call(self, inputs):
-    dense = inputs
-    for layer in self.layers:
-      dense = layer(dense)
-    return dense
+    nLayers = len(self.layers)
+
+    # Normalize inputs
+    xNorm = inputs[:,0:1] / 24.0 # assuming 24 width
+    yNorm = inputs[:,1:2] / 24.0
+    t = inputs[:,2:3] / 20.0 # assuming 20 frames
+    xyt = KL.Concatenate(axis=-1)([xNorm, yNorm, t])
+
+    uvp = self.layers[0](xyt)
+
+    for i in range(1, nLayers-1):
+      dense = self.layers[i]
+      uvp = dense(uvp) + uvp
+
+    return self.layers[nLayers-1](uvp)

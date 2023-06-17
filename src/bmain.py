@@ -101,11 +101,12 @@ dataSet.prepare_hard_boundary_condition()
 args.architecture.append(UT.nDim + 1)
 
 # Create training and validation (data + collocation points)
-nSamples = dataSet.get_num_total_pts()
-nTrain   = int(nSamples * 0.9)
+splitRatio = 0.9
+nSamples   = dataSet.get_num_total_pts() * dataSet.get_num_frames()
+nTrain     = int(nSamples * splitRatio)
 # Ensure training samples fit evenly
-nTrain   = args.batchSize * round(nTrain / args.batchSize)
-nValid   = nSamples - nTrain
+nTrain = args.batchSize * round(nTrain / args.batchSize)
+nValid = nSamples - nTrain
 
 print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
 
@@ -116,9 +117,9 @@ if args.source == UT.SRC_FLASHX:
   worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
 # Generators
-trainGen = dataSet.generate_train_valid_batch(0, worldSize, imageSize, fps, V, L, T, \
+trainGen = dataSet.generate_train_valid_batch(0, worldSize, imageSize, fps, V, L, T, splitRatio=splitRatio, \
                                               batchSize=args.batchSize, shuffle=False)
-validGen = dataSet.generate_train_valid_batch(1, worldSize, imageSize, fps, V, L, T, \
+validGen = dataSet.generate_train_valid_batch(1, worldSize, imageSize, fps, V, L, T, splitRatio=splitRatio, \
                                               batchSize=args.batchSize, shuffle=False)
 
 # Create model

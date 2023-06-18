@@ -102,25 +102,15 @@ args.architecture.append(UT.nDim + 1)
 
 # Create training and validation (data + collocation points)
 splitRatio = 0.9
-nSamples   = dataSet.get_num_total_pts() * dataSet.get_num_frames()
-nTrain     = int(nSamples * splitRatio)
-# Ensure training samples fit evenly
-nTrain = args.batchSize * round(nTrain / args.batchSize)
-nValid = nSamples - nTrain
-
-print('{} data / collocation points in training, {} in validation'.format(nTrain, nValid))
+batchSize  = args.batchSize
+nFrames    = dataSet.get_num_frames()
+nPointsPerFrame = dataSet.get_num_total_pts()
 
 assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 if args.source == UT.SRC_FLOWNET:
   worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
 if args.source == UT.SRC_FLASHX:
   worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
-
-# Generators
-trainGen = dataSet.generate_train_valid_batch(0, worldSize, imageSize, fps, V, L, T, splitRatio=splitRatio, \
-                                              batchSize=args.batchSize, shuffle=False)
-validGen = dataSet.generate_train_valid_batch(1, worldSize, imageSize, fps, V, L, T, splitRatio=splitRatio, \
-                                              batchSize=args.batchSize, shuffle=False)
 
 # Create model
 nameStr, paramsStr = args.name, ''
@@ -156,16 +146,34 @@ if args.restart:
   if args.restartLr != None:
     keras.backend.set_value(bubbleNet.optimizer.learning_rate, args.restartLr)
 
-# Training
-bubbleNet.fit(
-      trainGen,
-      initial_epoch=args.initTrain,
-      epochs=args.nEpoch,
-      steps_per_epoch=nTrain//args.batchSize,
-      validation_data=validGen,
-      validation_steps=nValid//args.batchSize,
-      verbose=True,
-      callbacks=bubbleCB)
+for i in range(1, nFrames+1):
+  # Sample selection of points
+  dataSet.prepare_batch_arrays(numFrames=i, resetTime=True, zeroMean=False)
+
+  nSamples   = nPointsPerFrame * i
+  nTrain     = int(nSamples * splitRatio)
+  nValid     = nSamples - nTrain
+  nTrainStepsEpoch = nTrain // batchSize
+  nValidStepsEpoch = nValid // batchSize
+
+  print('{} training points and {} steps/epoch, {} validation points and {} steps/epoch'.format(nTrain, nTrainStepsEpoch, nValid, nValidStepsEpoch))
+
+  # Generators
+  trainGen = dataSet.generate_train_valid_batch(0, nTrain, worldSize, imageSize, fps, V, L, T, \
+                                                batchSize=batchSize, shuffle=False)
+  validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, worldSize, imageSize, fps, V, L, T, \
+                                                batchSize=batchSize, shuffle=False)
+  # Training
+  bubbleNet.fit(
+        trainGen,
+        initial_epoch=args.initTrain,
+        epochs=args.nEpoch,
+        steps_per_epoch=nTrainStepsEpoch,
+        validation_data=validGen,
+        validation_steps=nValidStepsEpoch,
+        verbose=True,
+        callbacks=bubbleCB)
+
 bubbleNet.summary()
 
 # Loss plot

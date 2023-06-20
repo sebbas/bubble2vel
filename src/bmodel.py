@@ -78,7 +78,7 @@ class BModel(keras.Model):
     phi = 1.0
     if walls[0]: phi *= x     # left
     if walls[1]: phi *= (1-y) # top
-    if walls[2]: phi *= (1-y) # right
+    if walls[2]: phi *= (1-x) # right
     if walls[3]: phi *= y     # bottom
     return phi
 

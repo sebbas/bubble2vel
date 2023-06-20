@@ -60,6 +60,20 @@ class BModel(keras.Model):
     self.trainStat = {}
     self.validStat = {}
 
+    # ReLoBRaLoLoss parameters
+    alphaR = 0.999
+    temperature = 0.1
+    rho = 0.99
+    self.alphaR = alphaR
+    self.temperature = temperature
+    self.rho = rho
+    self.call_count = tf.Variable(0, trainable=False, dtype=tf.int16)
+
+    num_terms = len(self.alpha) + len(self.beta) + len(self.gamma)
+    self.lambdas = [tf.Variable(1., trainable=False) for _ in range(num_terms)]
+    self.last_losses = [tf.Variable(1., trainable=False) for _ in range(num_terms)]
+    self.init_losses = [tf.Variable(1., trainable=False) for _ in range(num_terms)]
+
 
   def _getG(self, xy, xyBc, bc, eps=1e-10):
     xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
@@ -296,16 +310,60 @@ class BModel(keras.Model):
     phi     = data[0][7] # SDF value
 
     with tf.GradientTape(persistent=True) as tape0:
-      # Compute the data loss for u, v and pde losses for
-      # continuity (0) and NS (1-2)
-      uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-        self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
-      # replica's loss, divided by global batch size
-      loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
-              + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
-              + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
-      loss += tf.add_n(self.losses)
-      loss  = loss #/ strategy.num_replicas_in_sync
+
+      usingReLoBRaLo = 1
+      if usingReLoBRaLo:
+        # obtain the unscaled values for each term
+        losses = [tf.reduce_mean(loss) for loss in self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)]
+
+        # in first iteration (self.call_count == 0), drop lambda_hat and use init lambdas, i.e. lambda = 1
+        #   i.e. alpha = 1 and rho = 1
+        # in second iteration (self.call_count == 1), drop init lambdas and use only lambda_hat
+        #   i.e. alpha = 0 and rho = 1
+        # afterwards, default procedure (see paper)
+        #   i.e. alpha = self.alpha and rho = Bernoully random variable with p = self.rho
+        alpha = tf.cond(tf.equal(self.call_count, 0),
+                lambda: 1.,
+                lambda: tf.cond(tf.equal(self.call_count, 1),
+                                lambda: 0.,
+                                lambda: self.alphaR))
+        rho = tf.cond(tf.equal(self.call_count, 0),
+              lambda: 1.,
+              lambda: tf.cond(tf.equal(self.call_count, 1),
+                              lambda: 1.,
+                              lambda: tf.cast(tf.random.uniform(shape=()) < self.rho, dtype=tf.float32)))
+
+        # compute new lambdas w.r.t. the losses in the previous iteration
+        lambdas_hat = [losses[i] / (self.last_losses[i] * self.temperature + EPS) for i in range(len(losses))]
+        lambdas_hat = tf.nn.softmax(lambdas_hat - tf.reduce_max(lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
+
+        # compute new lambdas w.r.t. the losses in the first iteration
+        init_lambdas_hat = [losses[i] / (self.init_losses[i] * self.temperature + EPS) for i in range(len(losses))]
+        init_lambdas_hat = tf.nn.softmax(init_lambdas_hat - tf.reduce_max(init_lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
+
+        # use rho for deciding, whether a random lookback should be performed
+        new_lambdas = [(rho * alpha * self.lambdas[i] + (1 - rho) * alpha * init_lambdas_hat[i] + (1 - alpha) * lambdas_hat[i]) for i in range(len(losses))]
+        self.lambdas = [var.assign(tf.stop_gradient(lam)) for var, lam in zip(self.lambdas, new_lambdas)]
+
+        # compute weighted loss
+        loss = tf.reduce_sum([lam * loss for lam, loss in zip(self.lambdas, losses)])
+
+        # store current losses in self.last_losses to be accessed in the next iteration
+        self.last_losses = [var.assign(tf.stop_gradient(loss)) for var, loss in zip(self.last_losses, losses)]
+        # in first iteration, store losses in self.init_losses to be accessed in next iterations
+        first_iteration = tf.cast(self.call_count < 1, dtype=tf.float32)
+        self.init_losses = [var.assign(tf.stop_gradient(loss * first_iteration + var * (1 - first_iteration))) for var, loss in zip(self.init_losses, losses)]
+
+        self.call_count.assign_add(1)
+      else:
+        uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
+          self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
+        # replica's loss, divided by global batch size
+        loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
+                + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
+                + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
+        loss += tf.add_n(self.losses)
+        loss  = loss #/ strategy.num_replicas_in_sync
     # update gradients
     if self.saveGradStat:
       uMseGrad      = tape0.gradient(uMse,      self.trainable_variables)

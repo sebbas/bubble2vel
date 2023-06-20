@@ -311,10 +311,13 @@ class BModel(keras.Model):
 
     with tf.GradientTape(persistent=True) as tape0:
 
+      EPS = 1e-7
       usingReLoBRaLo = 1
       if usingReLoBRaLo:
+        uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
+          self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
         # obtain the unscaled values for each term
-        losses = [tf.reduce_mean(loss) for loss in self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)]
+        losses = [uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls]
 
         # in first iteration (self.call_count == 0), drop lambda_hat and use init lambdas, i.e. lambda = 1
         #   i.e. alpha = 1 and rho = 1
@@ -362,8 +365,8 @@ class BModel(keras.Model):
         loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
                 + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
                 + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
-        loss += tf.add_n(self.losses)
-        loss  = loss #/ strategy.num_replicas_in_sync
+      loss += tf.add_n(self.losses)
+      loss  = loss #/ strategy.num_replicas_in_sync
     # update gradients
     if self.saveGradStat:
       uMseGrad      = tape0.gradient(uMse,      self.trainable_variables)

@@ -374,7 +374,7 @@ class BubbleDataSet:
         # Fetch the bc xy and bc value for every point in this batch
         idxT = np.concatenate(t.astype(int))
         xyDataBc = self.xytDataBc[idxT, :, :2]
-        uvDataBc = self.uvpDataBc[idxT, :, :2]
+        uvpDataBc = self.uvpDataBc[idxT, :, :]
         validDataBc = self.validDataBc[idxT, :]
 
         # Shift time and position to negative range (use -1 to account for 0 in center)
@@ -410,7 +410,7 @@ class BubbleDataSet:
         s += e
 
         dummy = vel
-        yield [pos, time, vel, xyDataBc, uvDataBc, validDataBc], dummy
+        yield [pos, time, vel, xyDataBc, uvpDataBc, validDataBc], dummy
 
 
   def prepare_batch_arrays(self, numFrames, resetTime=True, zeroMean=False):
@@ -516,12 +516,13 @@ class BubbleDataSet:
       if walls:
         self.xytDataBc[f, s:s+eWalls, :] = self.get_xyt_walls(f)
         self.uvpDataBc[f, s:s+eWalls, :] = self.get_uvp_walls(f)
-        self.validDataBc[f, s:s+eWalls] = 1
+        self.validDataBc[f, s:s+eWalls] = self.get_ids_walls(f)
 
       print(self.xytDataBc[f, :, :].shape)
 
       print('min, max uvpDataBc[0]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,0]), np.max(self.uvpDataBc[f,:,0])))
       print('min, max uvpDataBc[1]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,1]), np.max(self.uvpDataBc[f,:,1])))
+      print('min, max uvpDataBc[2]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,2]), np.max(self.uvpDataBc[f,:,2])))
 
 
   def generate_train_valid_batch(self, begin, end, worldSize, imageSize, fps, \
@@ -563,7 +564,7 @@ class BubbleDataSet:
 
       idxT = np.concatenate(t.astype(int))
       xyDataBc = self.xytDataBc[idxT, :, :2]
-      uvDataBc = self.uvpDataBc[idxT, :, :2]
+      uvpDataBc = self.uvpDataBc[idxT, :, :]
       validDataBc = self.validDataBc[idxT, :]
 
       # Convert from domain space to world space
@@ -583,7 +584,7 @@ class BubbleDataSet:
         vel = UT.vel_world_to_dimensionless(vel, V)
 
       dummy = vel
-      yield [pos, time, vel, xyDataBc, uvDataBc, validDataBc, id, phi], dummy
+      yield [pos, time, vel, xyDataBc, uvpDataBc, validDataBc, id, phi], dummy
 
 
   # Define domain border locations + attach uvp at those locations

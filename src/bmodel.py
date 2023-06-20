@@ -61,6 +61,28 @@ class BModel(keras.Model):
     self.validStat = {}
 
 
+  def _getG(self, xy, xyBc, bc, eps=1e-10):
+    xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
+    dist = tf.square(xyExp - xyBc)           # [nBatch, nXyBc, nDim]
+    dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nxyBc]
+    #dist = tf.math.sqrt(dist)               # [nBatch, nXyBc]
+    wi = tf.pow(1.0 / (dist + eps), 2)       # [nBatch, nXyBc]
+    wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nxyBc, 1]
+    denom = tf.reduce_sum(wi, axis=1)        # [nBatch, 1, nDim]
+    numer = tf.reduce_sum(wi * bc, axis=1)   # [nBatch, 1, dimBc]
+    g = numer / denom                        # [nBatch, dimBc]
+    return g
+
+
+  def _getPhi(self, x, y, walls):
+    phi = 1.0
+    if walls[0]: phi *= x     # left
+    if walls[1]: phi *= (1-y) # top
+    if walls[2]: phi *= (1-y) # right
+    if walls[3]: phi *= y     # bottom
+    return phi
+
+
   def call(self, inputs, training=False):
     '''
     inputs: [xy, t, uvp]
@@ -80,62 +102,84 @@ class BModel(keras.Model):
     # Use hard boundary condition
     # Reproduces exact values in boundary and filter networks effects near boundaries
     if self.hardBc:
-      xyBc    = inputs[3]
-      uvBc    = inputs[4]
-      validBc = inputs[5]
+      xy    = inputs[0]
+      xy   /= domainSize # Normalize to [0,1] for IDW calculation
+      x, y  = xy[:,0], xy[:,1]
 
-      # Normalize to [0,1] for IDW calculation
-      xy /= domainSize
+      uvpBc = inputs[4]
+      idsBc = inputs[5]
+
+      # (1) Construct g's. Gives exact bc in boundary cells, IDW interpolation value at every interior point
+      # (1.1) Construct function g for velocity bc
+      xyBc  = inputs[3]
       xyBc /= domainSize
-      x, y = xy[:,0], xy[:,1]
+      uvBc  = uvpBc[:,:,:2] # [nBatch, nXyBc, 2]
 
-      # (1) Construct g. Gives exact bc in boundary cells, IDW interpolation value at every interior point
-      eps  = 1.0e-10
-      xyExp = tf.expand_dims(xy, axis=1)            # [nBatch, 1, nDim]
-      dist = tf.square(xyExp - xyBc)                # [nBatch, nXyBc, nDim]
-      dist = tf.reduce_sum(dist, axis=-1)           # [nBatch, nxyBc]
-      #dist = tf.math.sqrt(dist)                    # [nBatch, nXyBc]
-      wi = tf.pow(1.0 / (dist + eps), 2)            # [nBatch, nXyBc]
-      wi = wi * validBc                             # [nBatch, nXyBc]
-      wi = tf.expand_dims(wi, axis=-1)              # [nBatch, nxyBc, 1]
-      denom = tf.reduce_sum(wi, axis=1)             # [nBatch, 1, nDim]
-      numer = tf.reduce_sum(wi * uvBc, axis=1)      # [nBatch, 1, nDim]
-      g = numer / denom                             # [nBatch, nDim]
+      # Get all bc points where vel bc is enfored (filter out other bc points)
+      walls  = tf.cast(tf.equal(idsBc, 20), tf.float32) # left
+      walls += tf.cast(tf.equal(idsBc, 22), tf.float32) # right
+      walls += tf.cast(tf.equal(idsBc, 23), tf.float32) # bottom
+      mask   = tf.cast(walls[0,:], tf.bool)
+      xyBc   = tf.boolean_mask(xyBc, mask, axis=1)
+      uvBc   = tf.boolean_mask(uvBc, mask, axis=1)
+      gVel   = self._getG(xy, xyBc, uvBc)
 
-      # (2) Construct phi. Zero in boundary cells, getting more positive at interior points
+      '''
+      # IDW calculation
+      eps   = 1.0e-10
+      xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
+      dist = tf.square(xyExp - xyBc)           # [nBatch, nXyBc, nDim]
+      dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nxyBc]
+      #dist = tf.math.sqrt(dist)               # [nBatch, nXyBc]
+      wi = tf.pow(1.0 / (dist + eps), 2)       # [nBatch, nXyBc]
+      wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nxyBc, 1]
+      denom = tf.reduce_sum(wi, axis=1)        # [nBatch, 1, nDim]
+      numer = tf.reduce_sum(wi * uvBc, axis=1) # [nBatch, 1, nDim]
+      gVel = numer / denom                     # [nBatch, nDim]
+      '''
 
-      # Use hard boundary along domain walls and/or bubble interface?
-      withWallsBc, withBubbleBc = 1, 0
-      phiWalls, phiBubble = np.inf, np.inf # Init levelsets with +inf
+      # (1.1) Construct function g for pressure bc
+      xyBc  = inputs[3]
+      xyBc /= domainSize
+      pBc   = uvpBc[:,:,2:] # [nBatch, nXyBc, 1]
 
-      # Construct levelset for wall boundary
-      if withWallsBc:
-        phiWalls = x * (1-x) * y # Filter function for left, right, and bottom domain boundaries
+      # Get all bc points where pressure bc is enfored (filter out other bc points)
+      walls = tf.cast(tf.equal(idsBc, 21), tf.float32) # top
+      mask  = tf.cast(walls[0,:], tf.bool)
+      xyBc  = tf.boolean_mask(xyBc, mask, axis=1)
+      pBc   = tf.boolean_mask(pBc, mask, axis=1)
+      gPres = self._getG(xy, xyBc, pBc)
 
-        # Alternative functions for phi
-        # (A) Based on exp function
-        #fac = 2
-        #phiWalls = (-fac**2*tf.pow((x-0.5), fac) + 1) * (-fac**2*tf.pow((x-0.5), fac) + 1) * \
-        #           (-fac**2*tf.pow((y-0.5), fac) + 1) * (-fac**2*tf.pow((y-0.5), fac) + 1)
-        # (B) Based on tanh function
-        #phiWalls = (0.5*(tf.math.tanh(-13*(x-.5)-4) * tf.math.tanh(13*(x-.5)-4)+1)) * (0.5*(tf.math.tanh(-13*(y-.5)-4) * tf.math.tanh(13*(y-.5)-4)+1))
-        # (C) Based on tanh function (open top)
-        #phiWalls = (0.5*(tf.math.tanh(-13*(x-.5)-4) * tf.math.tanh(13*(x-.5)-4)+0.986614)) * (0.5*(tf.math.tanh(13*(y-.5)+4)+0.986614))
+      '''
+      # IDW calculation
+      eps   = 1.0e-10
+      xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
+      dist = tf.square(xyExp - xyBc)           # [nBatch, nXyBc, nDim]
+      dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nxyBc]
+      #dist = tf.math.sqrt(dist)               # [nBatch, nXyBc]
+      wi = tf.pow(1.0 / (dist + eps), 2)       # [nBatch, nXyBc]
+      wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nxyBc, 1]
+      denom = tf.reduce_sum(wi, axis=1)        # [nBatch, 1, 1]
+      numer = tf.reduce_sum(wi * pBc, axis=1)  # [nBatch, 1, 1]
+      gPres = numer / denom                    # [nBatch, 1]
+      '''
 
-      # Construct levelset for bubble boundary
-      if withBubbleBc:
-        phiV = uvpBc[:,2]
-        phiBubble = (tf.abs(phiV) / domainSizeFull) # TODO: Add phi from bubble bc
+      # (2) Construct phi's. Zero in boundary cells, getting more positive at interior points
+      # (2.1) Construct function phi for velocity bc
+      #phiVel = x * (1-x) * y # Filter function for left, right, and bottom domain boundaries
+      phiVel = self._getPhi(x, y, [1,0,1,1]) # Filter at left, right, and bottom domain boundaries
 
-      # Join domain and bubble boundary levelsets
-      phi = tf.math.minimum(phiBubble, phiWalls)
+      # (2.2) Construct function phi for pressure bc
+      #phiPres = (1-y)
+      phiPres = self._getPhi(x, y, [0,1,0,0]) # Filter at top domain boundary
 
       # Assemble g and phi with uvp
-      uv, p = uvp[:,:2], uvp[:,2]
-      phi   = tf.expand_dims(phi, axis=-1)
-      uv    = g + uv * phi                 # [nBatch, nDim]
-      p     = tf.expand_dims(p, axis=-1)   # [nBatch, 1]
-      uvp   = tf.concat([uv, p], axis=-1)  # [nBatch, nDim + 1]
+      uv, p   = uvp[:,:2], uvp[:,2:]
+      phiVel  = tf.expand_dims(phiVel, axis=-1)
+      phiPres = tf.expand_dims(phiPres, axis=-1)
+      uv      = gVel + uv * phiVel               # [nBatch, nDim]
+      p       = gPres + p * phiPres              # [nBatch, nDim]
+      uvp     = tf.concat([uv, p], axis=-1)      # [nBatch, nDim + 1]
 
     return uvp
 
@@ -222,7 +266,6 @@ class BModel(keras.Model):
 
     # Compute domain wall loss for velocity
     wallMask = tf.cast(tf.equal(w, 20), tf.float32)  # left
-    wallMask += tf.cast(tf.equal(w, 21), tf.float32) # top
     wallMask += tf.cast(tf.equal(w, 22), tf.float32) # right
     wallMask += tf.cast(tf.equal(w, 23), tf.float32) # bottom
     nWallsPoint = tf.reduce_sum(wallMask) + 1.0e-10
@@ -247,7 +290,7 @@ class BModel(keras.Model):
     t       = data[0][1] # timestamps
     uv      = data[0][2] # uv velocities
     xyBc    = data[0][3] # xy positions of all bc points
-    uvBc    = data[0][4] # uv velocities of all bc points
+    uvpBc   = data[0][4] # uvp of all bc points
     validBc = data[0][5] # binary value indicating if bc points is valid
     w       = data[0][6] # id of the point (e.g. collocation, wall, ...)
     phi     = data[0][7] # SDF value
@@ -256,7 +299,7 @@ class BModel(keras.Model):
       # Compute the data loss for u, v and pde losses for
       # continuity (0) and NS (1-2)
       uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-        self.compute_losses(xy, t, w, phi, uv, xyBc, uvBc, validBc)
+        self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
       # replica's loss, divided by global batch size
       loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
               + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
@@ -321,14 +364,14 @@ class BModel(keras.Model):
     t       = data[0][1]
     uv      = data[0][2]
     xyBc    = data[0][3]
-    uvBc    = data[0][4]
+    uvpBc   = data[0][4]
     validBc = data[0][5]
     w       = data[0][6]
     phi     = data[0][7]
 
     # Compute the data and pde losses
     uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
-      self.compute_losses(xy, t, w, phi, uv, xyBc, uvBc, validBc)
+      self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
     # replica's loss, divided by global batch size
     loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \

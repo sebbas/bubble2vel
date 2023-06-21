@@ -128,8 +128,7 @@ modelName = nameStr + archStr + paramsStr
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
                       Re=UT.get_reynolds_number(args.source), hardBc=args.hardBc)
-bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0), loss=BL.ReLoBRaLoLoss)
-
+bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0), run_eagerly=1)
 bubbleNet.preview()
 
 # Callbacks

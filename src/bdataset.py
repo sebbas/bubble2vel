@@ -456,8 +456,16 @@ class BubbleDataSet:
 
     # Zero mean for pos range (use -1 to account for 0 in center)
     if zeroMean:
-      self.xytBatch[:,:1] -= (self.size-1) / 2
+      self.xytBatch[:,0] -= (self.size[0]-1) / 2
+      self.xytBatch[:,1] -= (self.size[1]-1) / 2
       #self.xytBatch[:,2] -= (self.nTotalFrames-1) / 2
+
+    normalizeXy = False
+    if normalizeXy:
+      self.xytBatch[:,0] /= 383.0
+      self.xytBatch[:,1] /= 383.0
+      self.uvpBatch[:,0] /= 383.0
+      self.uvpBatch[:,1] /= 383.0
 
     print('min, max uvp: [{}, {}]'.format(np.min(self.uvpBatch, axis=0), np.max(self.uvpBatch, axis=0)))
     print('min, max xyt: [{}, {}]'.format(np.min(self.xytBatch, axis=0), np.max(self.xytBatch, axis=0)))
@@ -1246,6 +1254,7 @@ class BubbleDataSet:
   def get_xyt_bubble(self, f):
     s = sum(self.nBubble[:f])
     e = s + self.nBubble[f]
+    print('get_xyt_bubble: s {}, e {}'.format(s, e))
     return self.xytBubble[s:e, ...]
 
 

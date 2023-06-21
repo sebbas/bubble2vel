@@ -17,7 +17,7 @@ class ReLoBRaLoLoss(tf.keras.losses.Loss):
         self.last_losses = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
         self.init_losses = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
 
-    def call(self, losses):
+    def call(self, losses, dummy):
         EPS = 1e-7
 
         # in first iteration (self.call_count == 0), drop lambda_hat and use init lambdas, i.e. lambda = 1

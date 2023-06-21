@@ -284,8 +284,8 @@ class BModel(keras.Model):
     return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
 
 
-  def compute_loss(self, errors):
-    return self.compiled_loss(errorsc)
+  def compute_loss(self, errors, dummy):
+    return self.compiled_loss(errors, dummy)
 
 
   def train_step(self, data):

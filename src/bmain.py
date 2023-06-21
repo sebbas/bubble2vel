@@ -146,11 +146,15 @@ if args.restart:
   if args.restartLr != None:
     keras.backend.set_value(bubbleNet.optimizer.learning_rate, args.restartLr)
 
-for i in range(1, nFrames+1):
+withBatchResampling = 0
+numIter = nFrames if withBatchResampling else 1
+
+for i in range(1, numIter+1):
   # Sample selection of points
+  numFrames = i if withBatchResampling else nFrames
   dataSet.prepare_batch_arrays(numFrames=i, resetTime=True, zeroMean=False)
 
-  nSamples   = nPointsPerFrame * i
+  nSamples   = nPointsPerFrame * i if withBatchResampling else nPointsPerFrame * nFrames
   nTrain     = int(nSamples * splitRatio)
   nValid     = nSamples - nTrain
   nTrainStepsEpoch = nTrain // batchSize

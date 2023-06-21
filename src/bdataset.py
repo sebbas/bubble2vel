@@ -417,6 +417,8 @@ class BubbleDataSet:
     print('Preparing samples for batch generator')
     rng = np.random.default_rng(2022)
 
+    if numFrames < 0: numFrames = self.nTotalFrames
+
     # Extract selection of interface points (otherwise use all)
     useAll = (self.nIfacePnt < 0)
     self.select_iface_points(numFrames, useAll)
@@ -1085,7 +1087,6 @@ class BubbleDataSet:
       self.xytIface = self.xytIface[mask]
       self.uvpIface = self.uvpIface[mask]
     else:
-      if numFrames < 0: numFrames = self.nTotalFrames
       nPts = self.nIfacePnt * numFrames
       self.xytIface = np.zeros((nPts, self.N_IN_VAR))
       self.uvpIface = np.zeros((nPts, self.N_OUT_VAR))
@@ -1099,7 +1100,6 @@ class BubbleDataSet:
       self.uvpWalls = copy.deepcopy(self.uvpDomain[:numPoints, :])
       self.idWalls = copy.deepcopy(self.idDomain)
     else:
-      if numFrames < 0: numFrames = self.nTotalFrames
       nPts = self.nWallPnt * numFrames
       self.xytWalls = np.zeros((nPts, self.N_IN_VAR))
       self.uvpWalls = np.zeros((nPts, self.N_OUT_VAR))

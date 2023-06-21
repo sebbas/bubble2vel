@@ -20,6 +20,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 import bdataset as BD
 import bmodel as BM
 import butils as UT
+import blosses as BL
 
 keras.backend.set_floatx('float32')
 
@@ -127,7 +128,7 @@ modelName = nameStr + archStr + paramsStr
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
                       Re=UT.get_reynolds_number(args.source), hardBc=args.hardBc)
-bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))
+bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0), loss=BL.ReLoBRaLoLoss)
 
 bubbleNet.preview()
 

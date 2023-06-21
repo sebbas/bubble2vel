@@ -346,8 +346,8 @@ class BModel(keras.Model):
 
       #tf.print(len(self.trainable_variables))
 
-      usingCompiledLoss = 1
-      if usingCompiledLoss:
+      usingReLoBRaLoLoss = 1
+      if usingReLoBRaLoLoss:
         losses = [uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls]
 
         EPS = 1e-7
@@ -395,7 +395,6 @@ class BModel(keras.Model):
                 + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
                 + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
 
-      tf.print(len(self.trainable_variables))
       loss += tf.add_n(self.losses)
     # update gradients
     if self.saveGradStat:

@@ -152,7 +152,7 @@ numIter = nFrames if withBatchResampling else 1
 for i in range(1, numIter+1):
   # Sample selection of points
   numFrames = i if withBatchResampling else nFrames
-  dataSet.prepare_batch_arrays(numFrames=i, resetTime=True, zeroMean=False)
+  dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
 
   nSamples   = nPointsPerFrame * i if withBatchResampling else nPointsPerFrame * nFrames
   nTrain     = int(nSamples * splitRatio)

@@ -351,7 +351,7 @@ class BModel(keras.Model):
 
       usingReLoBRaLoLoss = 1
       if usingReLoBRaLoLoss:
-        losses = [uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls]
+        losses = [uMse, vMse, pdeMse0, pdeMse1, pdeMse2]
 
         EPS = 1e-7
         # in first iteration (self.call_count == 0), drop lambda_hat and use init lambdas, i.e. lambda = 1
@@ -365,10 +365,12 @@ class BModel(keras.Model):
         #        lambda: tf.cond(tf.equal(self.call_count, 1),
         #                        lambda: 0.,
         #                        lambda: self.alpha))
-        alpha = self.getAlpha()
-        rho = self.getRho()
 
-        with tape0.stop_recording():
+        if tf.equal(tf.math.mod(self.call_count, iter0), 0):
+          tf.print('Updating lambdas')
+          alpha = self.getAlpha()
+          rho = self.getRho()
+
           # compute new lambdas w.r.t. the losses in the previous iteration
           lambdas_hat = [losses[i] / (self.last_losses[i] * self.temperature + EPS) for i in range(len(losses))]
           lambdas_hat = tf.nn.softmax(lambdas_hat - tf.reduce_max(lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
@@ -379,19 +381,18 @@ class BModel(keras.Model):
 
           # use rho for deciding, whether a random lookback should be performed
           new_lambdas = [(rho * alpha * self.lambdas[i] + (1 - rho) * alpha * init_lambdas_hat[i] + (1 - alpha) * lambdas_hat[i]) for i in range(len(losses))]
-          self.lambdas = new_lambdas#[var.assign(lam) for var, lam in zip(self.lambdas, new_lambdas)]
+          self.lambdas = new_lambdas
+
+          # store current losses in self.last_losses to be accessed in the next iteration
+          self.last_losses = losses
+          # in first iteration, store losses in self.init_losses to be accessed in next iterations
+          first_iteration = tf.cast(self.call_count <= self.iter1, dtype=tf.float32)
+          self.init_losses = [loss * first_iteration + var * (1 - first_iteration) for var, loss in zip(self.init_losses, losses)]
 
         # compute weighted loss
         loss = tf.reduce_sum([lam * loss for lam, loss in zip(self.lambdas, losses)])
 
-        with tape0.stop_recording():
-          # store current losses in self.last_losses to be accessed in the next iteration
-          self.last_losses = losses#[var.assign(tf.stop_gradient(loss)) for var, loss in zip(self.last_losses, losses)]
-          # in first iteration, store losses in self.init_losses to be accessed in next iterations
-          first_iteration = tf.cast(self.call_count <= self.iter1, dtype=tf.float32)
-          #self.init_losses = [var.assign(tf.stop_gradient(loss * first_iteration + var * (1 - first_iteration))) for var, loss in zip(self.init_losses, losses)]
-          self.init_losses = [loss * first_iteration + var * (1 - first_iteration) for var, loss in zip(self.init_losses, losses)]
-
+        tf.print(self.lambdas)
         self.call_count.assign_add(1)
       else:
         loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \

@@ -62,7 +62,7 @@ class BModel(keras.Model):
 
 
     alpha = 0.999
-    temperature = 0.1
+    temperature = 0.01
     rho = 0.99
     self.alphaR = alpha
     self.temperature = temperature
@@ -74,8 +74,8 @@ class BModel(keras.Model):
     self.last_losses = [1. for _ in range(self.numTerms)]
     self.init_losses = [1. for _ in range(self.numTerms)]
 
-    self.iter0 = 196
-    self.iter1 = self.iter0 * 2
+    self.iter0 = 0
+    self.iter1 = 1
 
 
   def _getG(self, xy, xyBc, bc, eps=1e-10):
@@ -303,26 +303,26 @@ class BModel(keras.Model):
 
   @tf.function
   def getAlpha1(self):
-    if tf.less_equal(self.call_count, self.iter1):
+    if tf.equal(self.call_count, self.iter1):
       return 0.
     else:
       return self.alphaR 
   @tf.function
   def getAlpha(self):
-    if tf.less_equal(self.call_count, self.iter0):
+    if tf.equal(self.call_count, self.iter0):
       return 1.
     else:
       return self.getAlpha1()
 
   @tf.function
   def getRho1(self):
-    if tf.less_equal(self.call_count, self.iter1):
+    if tf.equal(self.call_count, self.iter1):
       return 1.
     else:
       return tf.cast(tf.random.uniform(shape=()) < self.rho, dtype=tf.float32)
   @tf.function
   def getRho(self):
-    if tf.less_equal(self.call_count, self.iter0):
+    if tf.equal(self.call_count, self.iter0):
       return 1.
     else:
       return self.getRho1()
@@ -384,7 +384,7 @@ class BModel(keras.Model):
         # store current losses in self.last_losses to be accessed in the next iteration
         self.last_losses = losses
         # in first iteration, store losses in self.init_losses to be accessed in next iterations
-        first_iteration = tf.cast(self.call_count <= self.iter1, dtype=tf.float32)
+        first_iteration = tf.cast(self.call_count < self.iter1, dtype=tf.float32)
         self.init_losses = [loss * first_iteration + var * (1 - first_iteration) for var, loss in zip(self.init_losses, losses)]
 
         # compute weighted loss

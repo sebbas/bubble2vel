@@ -74,8 +74,8 @@ class BModel(keras.Model):
     self.last_losses = [1. for _ in range(self.numTerms)]
     self.init_losses = [1. for _ in range(self.numTerms)]
 
-    self.iter0 = 520
-    self.iter1 = 1040
+    self.iter0 = 196
+    self.iter1 = self.iter0 * 2
 
 
   def _getG(self, xy, xyBc, bc, eps=1e-10):
@@ -366,7 +366,7 @@ class BModel(keras.Model):
         #                        lambda: 0.,
         #                        lambda: self.alpha))
 
-        if tf.equal(tf.math.mod(self.call_count, iter0), 0):
+        if tf.equal(tf.math.mod(self.call_count, self.iter0), 0):
           tf.print('Updating lambdas')
           alpha = self.getAlpha()
           rho = self.getRho()

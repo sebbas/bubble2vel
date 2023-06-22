@@ -15,12 +15,13 @@ np.random.seed(2022)
 tf.random.set_seed(2022)
 
 from tensorflow import keras
-from tensorflow.keras.callbacks import EarlyStopping
 
 import bdataset as BD
 import bmodel as BM
 import butils as UT
 import blosses as BL
+
+import tensorflow.keras.callbacks as KC
 
 keras.backend.set_floatx('float32')
 
@@ -132,12 +133,10 @@ bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0), run_e
 bubbleNet.preview()
 
 # Callbacks
-bubbleCB = [keras.callbacks.ModelCheckpoint(filepath='./' + modelName + '/checkpoint', \
-                                            monitor='val_loss', save_best_only=True,\
-                                            save_weights_only=True, verbose=1),
-            keras.callbacks.ReduceLROnPlateau(monitor='loss', min_delta=0.01,\
-                                              patience=args.patience, min_lr=args.lrmin),
-            keras.callbacks.CSVLogger(modelName+'.log', append=True)]
+bubbleCB = [KC.ModelCheckpoint(filepath='./' + modelName + '/checkpoint', monitor='val_loss', save_best_only=True, save_weights_only=True, verbose=True),
+            KC.ReduceLROnPlateau(monitor='loss', min_delta=0.01, patience=args.patience, min_lr=args.lrmin),
+            KC.CSVLogger(modelName+'.log', append=True),
+            KC.EarlyStopping(monitor='loss', patience=32, restore_best_weights=True, verbose=True)]
 
 # Load checkpoints if restart
 if args.restart:

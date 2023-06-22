@@ -106,7 +106,7 @@ class BModel(keras.Model):
     '''
     xy  = inputs[0]
     t   = inputs[1]
-    uvpBc = inputs[2]
+    uvpOrig = inputs[2]
 
     xyt = tf.concat([xy, t], axis=1)
     uvp = self.mlp(xyt)
@@ -141,21 +141,7 @@ class BModel(keras.Model):
       uvBc   = tf.boolean_mask(uvBc, mask, axis=1)
       gVel   = self._getG(xy, xyBc, uvBc)
 
-      '''
-      # IDW calculation
-      eps   = 1.0e-10
-      xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
-      dist = tf.square(xyExp - xyBc)           # [nBatch, nXyBc, nDim]
-      dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nxyBc]
-      #dist = tf.math.sqrt(dist)               # [nBatch, nXyBc]
-      wi = tf.pow(1.0 / (dist + eps), 2)       # [nBatch, nXyBc]
-      wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nxyBc, 1]
-      denom = tf.reduce_sum(wi, axis=1)        # [nBatch, 1, nDim]
-      numer = tf.reduce_sum(wi * uvBc, axis=1) # [nBatch, 1, nDim]
-      gVel = numer / denom                     # [nBatch, nDim]
-      '''
-
-      # (1.1) Construct function g for pressure bc
+      # (1.2) Construct function g for pressure bc
       xyBc  = inputs[3]
       xyBc /= domainSize
       pBc   = uvpBc[:,:,2:] # [nBatch, nXyBc, 1]
@@ -166,20 +152,6 @@ class BModel(keras.Model):
       xyBc  = tf.boolean_mask(xyBc, mask, axis=1)
       pBc   = tf.boolean_mask(pBc, mask, axis=1)
       gPres = self._getG(xy, xyBc, pBc)
-
-      '''
-      # IDW calculation
-      eps   = 1.0e-10
-      xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
-      dist = tf.square(xyExp - xyBc)           # [nBatch, nXyBc, nDim]
-      dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nxyBc]
-      #dist = tf.math.sqrt(dist)               # [nBatch, nXyBc]
-      wi = tf.pow(1.0 / (dist + eps), 2)       # [nBatch, nXyBc]
-      wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nxyBc, 1]
-      denom = tf.reduce_sum(wi, axis=1)        # [nBatch, 1, 1]
-      numer = tf.reduce_sum(wi * pBc, axis=1)  # [nBatch, 1, 1]
-      gPres = numer / denom                    # [nBatch, 1]
-      '''
 
       # (2) Construct phi's. Zero in boundary cells, getting more positive at interior points
       # (2.1) Construct function phi for velocity bc
@@ -197,6 +169,11 @@ class BModel(keras.Model):
       uv      = gVel + uv * phiVel               # [nBatch, nDim]
       p       = gPres + p * phiPres              # [nBatch, nDim]
       uvp     = tf.concat([uv, p], axis=-1)      # [nBatch, nDim + 1]
+
+      withInitCond = 0
+      if withInitCond:
+        isInitCond = tf.cast(tf.equal(t, 0), tf.bool)
+        uvp[isInitCond,:2] = uvpOrig[isInitCond,:2]
 
     return uvp
 

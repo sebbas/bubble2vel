@@ -69,10 +69,8 @@ class BModel(keras.Model):
     self.rho = rho
     self.call_count = tf.Variable(0, trainable=False, dtype=tf.int16)
 
-    self.numTerms = len(self.alpha) + len(self.beta) + len(self.gamma)
-    #self.lambdas = [1. for _ in range(self.numTerms)]
-    #self.last_losses = [1. for _ in range(self.numTerms)]
-    #self.init_losses = [1. for _ in range(self.numTerms)]
+    # Using only uMse, vMse, pde0, pde1, pde2 for relobralo loss for now
+    self.numTerms = 5#len(self.alpha) + len(self.beta) + len(self.gamma)
     self.lambdas = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
     self.last_losses = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
     self.init_losses = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]

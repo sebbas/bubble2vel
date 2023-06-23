@@ -129,7 +129,7 @@ modelName = nameStr + archStr + paramsStr
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
                       Re=UT.get_reynolds_number(args.source), hardBc=args.hardBc)
-bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0), run_eagerly=1)
+bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))#, run_eagerly=1)
 bubbleNet.preview()
 
 # Callbacks
@@ -153,9 +153,11 @@ for i in range(1, numIter+1):
   numFrames = i if withBatchResampling else nFrames
   dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
 
-  nSamples   = nPointsPerFrame * i if withBatchResampling else nPointsPerFrame * nFrames
-  nTrain     = int(nSamples * splitRatio)
-  nValid     = nSamples - nTrain
+  nSamples = nPointsPerFrame * i if withBatchResampling else nPointsPerFrame * nFrames
+  nTrain   = int(nSamples * splitRatio)
+  # Ensure training samples fit evenly
+  nTrain   = args.batchSize * round(nTrain / args.batchSize)
+  nValid   = nSamples - nTrain
   nTrainStepsEpoch = nTrain // batchSize
   nValidStepsEpoch = nValid // batchSize
 

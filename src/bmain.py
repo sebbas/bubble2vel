@@ -153,7 +153,7 @@ for i in range(1, numIter+1):
   numFrames = i if withBatchResampling else nFrames
   dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
 
-  nSamples = nPointsPerFrame * i if withBatchResampling else nPointsPerFrame * nFrames
+  nSamples = nPointsPerFrame * i if withBatchResampling else nPointsPerFrame * numFrames
   nTrain   = int(nSamples * splitRatio)
   # Ensure training samples fit evenly
   nTrain   = args.batchSize * round(nTrain / args.batchSize)

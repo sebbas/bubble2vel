@@ -410,7 +410,7 @@ class BubbleDataSet:
         s += e
 
         dummy = vel
-        yield [pos, time, vel, xyDataBc, uvpDataBc, validDataBc], dummy
+        yield [pos, time, vel, xyDataBc, uvpDataBc, validDataBc, id], dummy
 
 
   def prepare_batch_arrays(self, numFrames, resetTime=True, zeroMean=False):

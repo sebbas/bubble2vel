@@ -104,8 +104,8 @@ class BModel(keras.Model):
     '''
     inputs: [xy, t, uvp]
     '''
-    xy  = inputs[0]
-    t   = inputs[1]
+    xy = inputs[0]
+    t = inputs[1]
     uvpOrig = inputs[2]
 
     xyt = tf.concat([xy, t], axis=1)
@@ -172,8 +172,8 @@ class BModel(keras.Model):
 
       withInitCond = 0
       if withInitCond:
-        isInitCond = tf.cast(tf.equal(t, 0), tf.bool)
-        uvp[isInitCond,:2] = uvpOrig[isInitCond,:2]
+        w = inputs[6]
+        uvp = tf.where(tf.equal(w, 3), uvpOrig, uvp)
 
     return uvp
 

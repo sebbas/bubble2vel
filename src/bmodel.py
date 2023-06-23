@@ -359,16 +359,17 @@ class BModel(keras.Model):
 
         # use rho for deciding, whether a random lookback should be performed
         new_lambdas = [(rho * alpha * self.lambdas[i] + (1 - rho) * alpha * init_lambdas_hat[i] + (1 - alpha) * lambdas_hat[i]) for i in range(len(losses))]
-        #self.lambdas = new_lambdas
-        self.lambdas = [var.assign(tf.stop_gradient(lam)) for var, lam in zip(self.lambdas, new_lambdas)]
+        for var, lam in zip(self.lambdas, new_lambdas):
+          var.assign(tf.stop_gradient(lam))
 
         # store current losses in self.last_losses to be accessed in the next iteration
-        #self.last_losses = losses
-        self.last_losses = [var.assign(tf.stop_gradient(loss)) for var, loss in zip(self.last_losses, losses)]
+        for var, loss in zip(self.last_losses, losses):
+          var.assign(tf.stop_gradient(loss))
+
         # in first iteration, store losses in self.init_losses to be accessed in next iterations
         first_iteration = tf.cast(self.call_count < self.iter1, dtype=tf.float32)
-        #self.init_losses = [loss * first_iteration + var * (1 - first_iteration) for var, loss in zip(self.init_losses, losses)]
-        self.init_losses = [var.assign(tf.stop_gradient(loss * first_iteration + var * (1 - first_iteration))) for var, loss in zip(self.init_losses, losses)]
+        for var, loss in zip(self.init_losses, losses):
+          var.assign(tf.stop_gradient(loss * first_iteration + var * (1 - first_iteration)))
 
         # compute weighted loss
         loss = tf.reduce_sum([lam * loss for lam, loss in zip(self.lambdas, losses)])

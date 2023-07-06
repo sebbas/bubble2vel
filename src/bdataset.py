@@ -668,7 +668,7 @@ class BubbleDataSet:
       # Bottom domain wall
       for i in range(self.walls[3]):
         numCells = sizeX - bWRight - bWLeft - 2
-        x = np.linspace(sizeY-1-bWRight-1, bWLeft+1, num=numCells, dtype=float)
+        x = np.linspace(sizeX-1-bWRight-1, bWLeft+1, num=numCells, dtype=float)
         y = np.full((numCells,), bWBottom-i, dtype=float)
         t = np.full((numCells,), frame, dtype=float)
         d = np.full((numCells,), idBottom, dtype=int)

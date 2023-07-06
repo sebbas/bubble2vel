@@ -34,11 +34,11 @@ class DenseLayers(KL.Layer):
       activation = 'linear' if is_last and last_linear else act
 
       if not is_last:
-        self.layers.append(KL.Dense(w, activation=activation, kernel_initializer='glorot_normal',
+        self.layers.append(KL.Dense(w, activation=activation,
                            kernel_regularizer=KR.l2(reg[i]),
                            name=prefix+repr(i)))
       else:
-        self.layers.append(KL.Dense(w, activation=activation, kernel_initializer='glorot_normal',
+        self.layers.append(KL.Dense(w, activation=activation,
                            use_bias=False, kernel_regularizer=KR.l2(reg[i]),
                            name=prefix+repr(i)))
 
@@ -46,16 +46,16 @@ class DenseLayers(KL.Layer):
   def call(self, inputs):
     nLayers = len(self.layers)
 
-    # Normalize inputs
-    xNorm = inputs[:,0:1] / 24.0 # assuming 24 width
-    yNorm = inputs[:,1:2] / 24.0
-    t = inputs[:,2:3] / 20.0 # assuming 20 frames
+    # TODO: Normalize inputs
+    xNorm = inputs[:,0:1]
+    yNorm = inputs[:,1:2]
+    t = inputs[:,2:3]
     xyt = KL.Concatenate(axis=-1)([xNorm, yNorm, t])
 
     uvp = self.layers[0](xyt)
 
     for i in range(1, nLayers-1):
       dense = self.layers[i]
-      uvp = dense(uvp) + uvp
+      uvp = dense(uvp)
 
     return self.layers[nLayers-1](uvp)

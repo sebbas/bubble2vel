@@ -195,14 +195,6 @@ class BubbleDataSet:
       frame += 1
       fNameExact = self.fName % frame
 
-    if UT.VID_DEBUG:
-      # Ffmpeg videos
-      UT.save_video(subdir='simulation', name='velocity_stream', imgDir='../img/simulation/plots/', fps=15)
-      UT.save_video(subdir='simulation', name='velocity_vector', imgDir='../img/simulation/plots/', fps=15)
-      UT.save_video(subdir='simulation', name='temperature_plt', imgDir='../img/simulation/plots/', fps=15)
-      UT.save_video(subdir='simulation', name='pressure_plt', imgDir='../img/simulation/plots/', fps=15)
-      UT.save_video(subdir='simulation', name='levelset_plt', imgDir='../img/simulation/plots/', fps=15)
-
     return cnt == (self.endFrame - self.startFrame + 1)
 
 
@@ -970,11 +962,6 @@ class BubbleDataSet:
       print('Total number of bubble points: {}'.format(np.sum(self.nBubble)))
       print('Total number of fluid points: {}'.format(np.sum(self.nFluid)))
 
-    if UT.VID_DEBUG:
-      UT.save_video(subdir='extract', name='flags_extract', imgDir='../img/extract/', fps=15)
-      UT.save_video(subdir='extract', name='bubblePts_extract_i{:02d}'.format(self.interface), imgDir='../img/extract/', fps=15)
-      UT.save_video(subdir='extract', name='magnitude_extract', imgDir='../img/extract/', fps=15)
-
     # Allocate arrays for preprocessed data ...
     self.uvpBubble   = np.zeros((np.sum(self.nBubble), self.dim + 1), dtype=float) # dim + 1 for p
     self.xytBubble = np.zeros((np.sum(self.nBubble), self.dim + 1), dtype=float) # dim + 1 for t
@@ -1251,10 +1238,10 @@ class BubbleDataSet:
   def get_source_name(self):
     return self.sourceName
 
+
   def get_xyt_bubble(self, f):
     s = sum(self.nBubble[:f])
     e = s + self.nBubble[f]
-    print('get_xyt_bubble: s {}, e {}'.format(s, e))
     return self.xytBubble[s:e, ...]
 
 
@@ -1294,25 +1281,4 @@ class BubbleDataSet:
     return self.idDomain[s:e]
 
 
-  '''
-  def get_xy_data(self, f):
-    ptsPerFrame = (self.nIfacePnt // self.nTotalFrames)
-    s = ptsPerFrame * f
-    e = s + ptsPerFrame
-    return self.xytIface[s:e, ...]
-
-
-  def get_xy_col(self, f):
-    ptsPerFrame = (self.nColPnt // self.nTotalFrames)
-    s = ptsPerFrame * f
-    e = s + ptsPerFrame
-    return self.xytCol[s:e, ...]
-
-
-  def get_xy_wall(self, f):
-    ptsPerFrame = (self.nWallPnt // self.nTotalFrames)
-    s = ptsPerFrame * f
-    e = s + ptsPerFrame
-    return self.xytDomain[s:e, ...]
-  '''
 

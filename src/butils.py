@@ -137,7 +137,7 @@ def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
     colorbar = True
     cmin = np.min(M)
     cmax = np.max(M)
-    plot = plt.imshow(M, cmap=cmap, cmin=-1.0, cmax=1.0)
+    plot = plt.imshow(M, cmap=cmap)
 
   ax.set_xlim(0, size[0])
   ax.set_ylim(0, size[1])

@@ -6,13 +6,6 @@ import sys
 import copy
 import numpy as np
 import random as rn
-import warnings
-try:
-  import boxkit.api as boxkit
-  haveBoxkit = True
-except ImportError:
-  warnings.warn('Boxkit not found. Creating datasets from flashx source will not be possible.')
-  haveBoxkit = False
 
 import butils as UT
 
@@ -88,112 +81,107 @@ class BubbleDataSet:
     self.bshape = [] # Num of blocks in each dimension
 
 
-  def _load_flashx(self, filter=True):
-    assert haveBoxkit, 'Boxkit has not been imported. Cannot load FlashX data'
-
+  def _load_flashx(self, n_channels=3, n_dimensions=2, mode=3):
     frame = self.startFrame
-    fNameExact = self.fName % frame
-    cnt = 0 # Frame counter
-    allocArrays = True
+    fName = self.fName % frame
+    file = h5.File(fName, 'r')
 
-    while os.path.exists(fNameExact) and frame <= self.endFrame:
+    attrs = ['velx', 'vely', 'dfun']#, 'temp', ]
+    assert len(attrs) == n_channels, 'Number of attributes must match channel size'
+
+    n_blocks, points_z, points_y, points_x = (file[attrs[0]].shape)
+
+    print('n_blocks {}, points ({}, {}, {})'.format(n_blocks, points_z, points_y, points_x))
+    print('Mode is {}'.format(mode))
+
+    # mode = 384: 384 dataset, mode = 2: 2D dataset, mode = 3: tiny single bubble, mode = 4: single bubble
+    if mode == 384:
+      fac = [24, 24, 1]
+      min_offset, max_offset = [12, 0, -1], [12, 0, 0]
+    elif mode == 3: # tiny single bubble
+      fac = [6, 9, 1]
+      min_offset, max_offset = [2, 0, -1], [2, 0, 0]
+    else:
+      sys.exit('Invalid mode. Mode is {}'.format(mode))
+
+    frame_z, frame_y, frame_x = points_z*fac[2], points_y*fac[1], points_x*fac[0]
+    self.size = [frame_x, frame_y]
+
+    print('size {}'.format(self.size))
+
+    if n_dimensions == 2:
+      self.vel = np.zeros((self.nTotalFrames, frame_y, frame_x, n_channels), dtype=float)
+    elif n_dimensions == 3:
+      self.vel = np.zeros((self.nTotalFrames, frame_z, frame_y, frame_x, n_channels), dtype=float)
+
+    cnt = 0 # Frame counter
+
+    while os.path.exists(fName) and frame <= self.endFrame:
       UT.print_progress(cnt, self.nTotalFrames)
 
-      dataset = boxkit.read.dataset(fNameExact, source="flash")
+      sz, sy, sx = 0, 0, 0
+      ez, ey, ex = 0, 0, 0
 
-      # Block count in each dimension (z-y-x)
-      bshapeZ = int(dataset.zmax-dataset.zmin)
-      if not bshapeZ: bshapeZ = 1 # Use z=1 if in 2D
-      bshape = (bshapeZ, int(dataset.ymax-dataset.ymin), int(dataset.xmax-dataset.xmin))
-      # Points per block in each dimension (z-y-x)
-      self.pshape = (dataset.nzb, dataset.nyb, dataset.nxb)
-      # Overall size (x-y)
-      self.size = np.array([bshape[2]*self.pshape[2], bshape[1]*self.pshape[1]])
+      for n in range(n_blocks):
+        bb = file['bounding box'][n]
+        bs = file['block size'][n]
 
-      # Only allocate arrays once (assume same dimension for every frame)
-      if allocArrays:
-        temperature = np.zeros((self.nTotalFrames, self.size[1], self.size[0]), dtype=float)
-        pressure = np.zeros((self.nTotalFrames, self.size[1], self.size[0]), dtype=float)
-        self.vel = np.zeros((self.nTotalFrames, self.size[1], self.size[0], self.dim + 1), dtype=float)
-        allocArrays = False
-      else:
-        assert temperature.shape[1] == self.size[1] and temperature.shape[2] == self.size[0]
-        assert pressure.shape[1] == self.size[1] and pressure.shape[2] == self.size[0]
-        assert self.vel.shape[1] == self.size[1] and self.vel.shape[2] == self.size[0]
+        print('bounding box [{}, {}, {}]'.format(bb[0], bb[1], bb[2]))
+        print('block size [{}, {}, {}]'.format(bs[0], bs[1], bs[2]))
 
-      bcnt = 0 # Current block number
-      for bk in range(bshape[0]):
-        for bj in range(bshape[1]):
-          for bi in range(bshape[2]):
-            for pk in range(self.pshape[0]):
-              for pj in range(self.pshape[1]):
-                # Get one block line for every attribute
-                temp = dataset.blocklist[bcnt]['temp'][pk][pj]
-                pres = dataset.blocklist[bcnt]['pres'][pk][pj]
-                dfun = dataset.blocklist[bcnt]['dfun'][pk][pj]
-                velx = dataset.blocklist[bcnt]['velx'][pk][pj]
-                vely = dataset.blocklist[bcnt]['vely'][pk][pj]
-                # Write block line into arrays
-                sx = bi * self.pshape[2] # start in x dimension
-                ex = sx + self.pshape[2] # end in x dimension
-                sy = bj * self.pshape[1] + pj # start in y dimension
-                temperature[cnt, sy, sx:ex] = temp[0:self.pshape[2]]
-                pressure[cnt, sy, sx:ex] = pres[0:self.pshape[2]]
-                self.vel[cnt, sy, sx:ex, 0] = velx[0:self.pshape[2]]
-                self.vel[cnt, sy, sx:ex, 1] = vely[0:self.pshape[2]]
-                self.vel[cnt, sy, sx:ex, 2] = dfun[0:self.pshape[2]]
-            bcnt += 1
+        xmin, xmax = bb[0][0] + min_offset[0], bb[0][1] + max_offset[0]
+        ymin, ymax = bb[1][0] + min_offset[1], bb[1][1] + max_offset[1]
+        zmin, zmax = bb[2][0] + min_offset[2], bb[2][1] + max_offset[2]
 
-      # Filter out the outlier velocities above a certain velocity magnitude
-      filter = 0
-      if filter:
-        velMag = np.sqrt(np.square(self.vel[:,:,:,0]) + np.square(self.vel[:,:,:,1]))
+        # Start, end positions in image space
+        if not bs[2]: bs[2] = 1.0
+        sx, ex = int(np.rint(xmin/bs[0]) * points_x), int(np.rint(xmax/bs[0]) * points_x)
+        sy, ey = int(np.rint(ymin/bs[1]) * points_y), int(np.rint(ymax/bs[1]) * points_y)
+        sz, ez = int(np.rint(zmin/bs[2]) * points_z), int(np.rint(zmax/bs[2]) * points_z)
 
-        # Replace outliers (e.g. fixed value or quantile)
-        maxMag = 10.0
-        #maxMag = np.quantile(velMag[:,:,:], 0.99) # e.g. find the 0.99 quantile in all vels
-        print('Capping velocites above magnitude of {}'.format(maxMag))
+        if 1:
+          print('x {}, {}'.format(xmin, xmax))
+          print('y {}, {}'.format(ymin, ymax))
+          print('z {}, {}'.format(zmin, zmax))
+        if 1:
+          print('{}, {}'.format(sx, ex))
+          print('{}, {}'.format(sy, ey))
+          print('{}, {}'.format(sz, ez))
 
-        # Scale velocity vectors in each dimension
-        scaleVec = np.where(velMag[:,:,:] > maxMag, maxMag / (velMag[:,:,:] + 1.0e-10), 1)
-        scaleVec = np.expand_dims(scaleVec, axis=-1)
-        self.vel[:,:,:,:self.dim] *= scaleVec
+        for i, attr_name in enumerate(attrs):
+          field = file[attr_name]
+          block = field[n]
 
-      if 0 and UT.PRINT_DEBUG:
-        tempMin, tempMax = temperature[cnt].min(), temperature[cnt].max()
-        print('Frame {}: Min/Max temp [{},{}]'.format(frame, tempMin, tempMax))
-        presMin, presMax = pressure[cnt].min(), pressure[cnt].max()
-        print('Frame {}: Min/Max pressure [{},{}]'.format(frame, presMin, presMax))
+          if n_dimensions == 2:
+            self.vel[cnt, sy:ey, sx:ex, i] = block[0] # z has only 1 dim
+          elif n_dimensions == 3:
+            self.vel[cnt, sz:ez, sy:ey, sx:ex, i] = block
 
-        velx = abs(max(self.vel[cnt,:,:,0].min(), self.vel[cnt,:,:,0].max(), key = abs))
-        vely = abs(max(self.vel[cnt,:,:,1].min(), self.vel[cnt,:,:,1].max(), key = abs))
-        print('Frame {}: Maximum vel [{}, {}]'.format(frame, velx, vely))
-        dfunMin, dfunMax = self.vel[cnt,:,:,2].min(), self.vel[cnt,:,:,2].max()
-        print('Frame {}: Min/Max levelset [{},{}]'.format(frame, dfunMin, dfunMax))
+      # Mirror dataset vertically
+      mirror = 1
+      if mirror and mode == 3:
+        mirrorData = copy.deepcopy(np.fliplr(self.vel[cnt, ...]))
+
+        # Flip velx (2D) and velz (3D only) in mirrored data
+        mirrorData[:,:,0] *= -1.0
+        if n_dimensions == 3:
+          mirrorData[:,:,2] *= -1.0
+
+        self.vel[cnt, ...] += mirrorData
 
       if UT.IMG_DEBUG:
-        # Raw grids
-        UT.save_image(temperature[cnt], '{}/raw'.format(self.sourceName), 'flashx_temp_raw', frame, cmap='jet')
-        UT.save_image(pressure[cnt], '{}/raw'.format(self.sourceName), 'flashx_pres_raw', frame, cmap='jet')
-        UT.save_image(self.vel[cnt,:,:,0], '{}/raw'.format(self.sourceName), 'flashx_velx_raw', frame, cmap='hot')
-        UT.save_image(self.vel[cnt,:,:,1], '{}/raw'.format(self.sourceName), 'flashx_vely_raw', frame, cmap='hot')
-        UT.save_image(self.vel[cnt,:,:,2], '{}/raw'.format(self.sourceName), 'flashx_phi_raw', frame, cmap='jet', vmin=-0.5, vmax=0.5)
-        # Velocity matplotlib plots
-        UT.save_velocity(self.vel[cnt], '{}/plots'.format(self.sourceName), 'flashx_vel_stream', frame, size=self.size, type='stream', density=5.0)
-        UT.save_velocity(self.vel[cnt], '{}/plots'.format(self.sourceName), 'flashx_vel_vector', frame, size=self.size, type='quiver', arrow_res=8, cmin=0.0, cmax=5.0)
-        # Grid matplotlib plots
-        UT.save_plot(temperature[cnt], '{}/plots'.format(self.sourceName), 'flashx_temp_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
-        UT.save_plot(pressure[cnt], '{}/plots'.format(self.sourceName), 'flashx_pres_plt', frame, size=self.size, cmin=0.0, cmax=1.0, cmap='jet')
-        UT.save_plot(self.vel[cnt,:,:,2], '{}/plots'.format(self.sourceName), 'flashx_phi_plt', frame, size=self.size, cmin=-1.0, cmax=1.0, cmap='jet')
-        # Distribution velocities in bins
-        UT.save_velocity_bins(self.vel[cnt,:,:,0], '{}/histograms'.format(self.sourceName), 'flashx_velx_bins', frame, bmin=-1.0, bmax=1.0, bstep=0.05)
-        UT.save_velocity_bins(self.vel[cnt,:,:,1], '{}/histograms'.format(self.sourceName), 'flashx_vely_bins', frame, bmin=-1.0, bmax=1.0, bstep=0.05)
+        UT.save_image(self.vel[cnt,:,:,0], '{}/raw'.format(self.sourceName), 'velu_raw', frame, cmap='hot')
+        UT.save_image(self.vel[cnt,:,:,1], '{}/raw'.format(self.sourceName), 'velv_vely_raw', frame, cmap='hot')
+        UT.save_image(self.vel[cnt,:,:,2], '{}/raw'.format(self.sourceName), 'dfun_raw', frame, cmap='jet', vmin=-0.5, vmax=0.5)
+        UT.save_velocity(self.vel[cnt], '{}/raw'.format(self.sourceName), 'vel_stream', frame, size=self.size, type='stream', density=5.0)
+        UT.save_velocity(self.vel[cnt], '{}/raw'.format(self.sourceName), 'vel_vector', frame, size=self.size, type='quiver', arrow_res=2)
+        UT.save_velocity(self.vel[cnt], '{}/raw'.format(self.sourceName), 'vel_mag', frame, size=self.size, type='mag')
+        UT.save_plot(self.vel[cnt,:,:,2], '{}/raw'.format(self.sourceName), 'dfun_plt', frame, size=self.size, cmin=-1.0, cmax=1.0, cmap='jet')
 
-      # Next array index
-      cnt += 1
-      # Next frame index
-      frame += 1
-      fNameExact = self.fName % frame
+      cnt += 1 # Next array index
+      frame += 1 # Next frame index
+      fName = self.fName % frame
+      file = h5.File(fName, 'r')
 
     return cnt == (self.endFrame - self.startFrame + 1)
 
@@ -300,7 +288,7 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, worldSize, imageSize, fps, L, T, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1e4)):
+  def generate_predict_pts(self, begin, end, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1e4)):
     print('Generating prediction points')
 
     for f in range(begin, end):
@@ -382,6 +370,7 @@ class BubbleDataSet:
             print('min, max xyt[1]: [{}, {}]'.format(np.min(xy[:,0]), np.max(xy[:,0])))
             print('min, max xyt[2]: [{}, {}]'.format(np.min(xy[:,1]), np.max(xy[:,1])))
 
+        '''
         # Convert from domain space to world space
         pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
         time = UT.time_domain_to_world(t, fps)
@@ -397,12 +386,15 @@ class BubbleDataSet:
         if self.source == UT.SRC_FLOWNET:
           vel = UT.vel_domain_to_world(uv, worldSize, fps)
           vel = UT.vel_world_to_dimensionless(vel, V)
-
+        '''
         print('Feeding batch from {} to {}'.format(s, s+e))
         s += e
 
-        dummy = vel
-        yield [pos, time, vel, xyDataBc, uvpDataBc, validDataBc, id], dummy
+        xy = UT.get_xy_scaled(xy)
+        xyDataBc = UT.get_xy_scaled(xyDataBc)
+        t = UT.get_t_scaled(t)
+
+        yield [xy, t, uv, xyDataBc, uvpDataBc, validDataBc, id], uv
 
 
   def prepare_batch_arrays(self, numFrames, resetTime=True, zeroMean=False):
@@ -527,8 +519,7 @@ class BubbleDataSet:
       print('min, max uvpDataBc[2]: [{}, {}]'.format(np.min(self.uvpDataBc[f,:,2]), np.max(self.uvpDataBc[f,:,2])))
 
 
-  def generate_train_valid_batch(self, begin, end, worldSize, imageSize, fps, \
-                                 V, L, T, batchSize=64, shuffle=True):
+  def generate_train_valid_batch(self, begin, end, batchSize=64, shuffle=True):
     generatorType = 'training' if begin == 0 else 'validation'
     UT.print_info('\nGenerating {} batches with size {}'.format(generatorType, batchSize))
 
@@ -570,6 +561,7 @@ class BubbleDataSet:
       validDataBc = self.validDataBc[idxT, :]
 
       # Convert from domain space to world space
+      '''
       pos  = UT.pos_domain_to_world(xy, worldSize, imageSize)
       time = UT.time_domain_to_world(t, fps)
       xyDataBc = UT.pos_domain_to_world(xyDataBc, worldSize, imageSize)
@@ -584,9 +576,13 @@ class BubbleDataSet:
       if self.source == UT.SRC_FLOWNET:
         vel = UT.vel_domain_to_world(uv, worldSize, fps)
         vel = UT.vel_world_to_dimensionless(vel, V)
+      '''
 
-      dummy = vel
-      yield [pos, time, vel, xyDataBc, uvpDataBc, validDataBc, id, phi], dummy
+      xy = UT.get_xy_scaled(xy)
+      xyDataBc = UT.get_xy_scaled(xyDataBc)
+      t = UT.get_t_scaled(t)
+
+      yield [xy, t, uv, xyDataBc, uvpDataBc, validDataBc, id, phi], uv
 
 
   # Define domain border locations + attach uvp at those locations
@@ -804,17 +800,19 @@ class BubbleDataSet:
 
     for j in range(sizeY):
       for i in range(sizeX):
-        isBubble = phi[i,j] > 0
+        isBubble = phi[j,i] > 0
         isFluid = not isBubble
+
         # Safe grid indices
-        iM, iP, jM, jP = max(i-1,0), min(i+1, sizeX-1), max(j-1,0), min(j+1, sizeY-1)
-        
-        isIntersection = ( phi[iM, j ] > 0 or phi[iM, j ] > 0 or \
-                           phi[i,  jP] > 0 or phi[i,  jM] > 0 or \
-                           phi[iP, jP] > 0 or phi[iM, jP] > 0 or \
-                           phi[iP, jM] > 0 or phi[iM, jM] > 0) and phi[i,j] <= 0
-        intersection[i, j] = isIntersection
-        flags[i, j] = self.FLAG_BUBBLE if isBubble else self.FLAG_FLUID
+        iN, iP, jN, jP = max(i-1,0), min(i+1, sizeX-1), max(j-1,0), min(j+1, sizeY-1)
+
+        isIntersection = ( phi[jN, i ] > 0 or phi[jN, i ] > 0 or \
+                           phi[j,  iP] > 0 or phi[j,  iN] > 0 or \
+                           phi[jP, iP] > 0 or phi[jN, iP] > 0 or \
+                           phi[jP, iN] > 0 or phi[jN, iN] > 0) and phi[j,i] <= 0
+
+        intersection[j, i] = isIntersection
+        flags[j, i] = self.FLAG_BUBBLE if isBubble else self.FLAG_FLUID
 
 
   def _extract_flownet_points(self, mag, intersection, flags, velEps):
@@ -891,9 +889,9 @@ class BubbleDataSet:
       UT.print_progress(f, self.nTotalFrames)
 
       # Intersection == grid with all cells at fluid / bubble intersection
-      intersection = np.zeros((sizeX, sizeY), dtype=int)
+      intersection = np.zeros((sizeY, sizeX), dtype=int)
       # Flags == grid with the type of the cell (fluid or bubble)
-      flags = np.full((sizeX, sizeY), self.FLAG_BUBBLE)
+      flags = np.full((sizeY, sizeX), self.FLAG_BUBBLE)
 
       # Velocity magnitude per cell
       U, V = self.vel[f,:,:,0], self.vel[f,:,:,1]

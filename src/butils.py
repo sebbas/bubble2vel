@@ -20,6 +20,7 @@ nDim = 2
 
 # Values for experimental dataset (flownet, water)
 # Reference quantities for non-dimensionalization
+'''
 V         = 0.625               # [meter/second],   Reference velocity
 L         = 0.02                # [meter],          Reference length
 T         = L / V               # [second],         Reference time
@@ -31,10 +32,11 @@ pixelSize = 1.922e-5             # [meters] at resolution 1024px
 worldSize = pixelSize * 1024     # [meters], must mult with res that the pixel size was captured at
 # Domain space quantities
 imageSize = 512
-
+'''
 
 # Values for simulation dataset (FlashX, FC-72)
 # Reference quantities for non-dimensionalization
+'''
 V_fx         = 0.0868                 # [meter/second],     Reference velocity
 L_fx         = 7e-4                   # [meter],            Reference length
 T_fx         = L_fx / V_fx            # [second],           Reference time
@@ -47,12 +49,33 @@ fps_fx       = 125
 worldSize_fx = 0.0168 # 16.8 millimeters
 # Domain space quantities
 imageSize_fx = 384
+'''
+
+imageSize   = [96.0, 144.0]
+dimlessSize = [4.0, 6.0]
+Re = 303.0
+timeScale = 0.1
+posScale = [a / b for a, b in zip(imageSize, dimlessSize)]
+assert posScale[0] == posScale[1]
+posScale = posScale[0]
+dimlessMax = [(imageSize[0]-1) / posScale, (imageSize[1]-1) / posScale]
+
+def get_xy_scaled(xy):
+  return xy / posScale
+
+
+def get_t_scaled(t):
+  return t * timeScale
 
 
 def _ensure_exists(dir):
   if not os.path.exists(dir):
     os.makedirs(dir)
   return dir
+
+
+def get_figure_size(size, base_size=10):
+  return (base_size/(size[1]/size[0]), base_size) if size[0]<size[1] else (base_size, base_size/(size[0]/size[1]))
 
 
 def save_image(src, subdir, name, frame, i=0, origin='lower', cmap='gray', vmin=None, vmax=None):
@@ -64,7 +87,7 @@ def save_image(src, subdir, name, frame, i=0, origin='lower', cmap='gray', vmin=
 
 
 def save_array(src, subdir, name, frame, size):
-  grid = np.zeros((size[0], size[1]), dtype=int)
+  grid = np.zeros((size[1], size[0]), dtype=int)
   for pos in src:
     grid[int(pos[1]), int(pos[0])] = 1
   save_image(grid, subdir, name, frame)
@@ -106,7 +129,7 @@ def save_video(subdir, name, imgDir, fps=5):
 def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
                   type='stream', arrow_res=1, cmin=0.0, cmax=5.0, density=5.0, \
                   filterZero=False, cmap='jet'):
-  fig, ax = plt.subplots(1, 1, figsize=(10,10))
+  fig, ax = plt.subplots(1, 1, figsize=get_figure_size(size))
   x = np.arange(0, int(size[0]), arrow_res)
   y = np.arange(0, int(size[1]), arrow_res)
   X, Y = np.meshgrid(x, y, indexing='xy')
@@ -177,7 +200,7 @@ def save_velocity_bins(src, subdir, name, frame, bmin, bmax, bstep):
 
 
 def save_plot(src, subdir, name, frame, size=(512,512,1), invertY=False, cmin=0.0, cmax=5.0, cmap=None):
-    fig, ax = plt.subplots(1, 1, figsize=(10,10))
+    fig, ax = plt.subplots(1, 1, figsize=get_figure_size(size))
     ax.set_xlim(0, int(size[0]))
     ax.set_ylim(0, int(size[1]))
     if invertY:
@@ -231,7 +254,7 @@ def get_arch_string(arch):
 def get_list_string(list, delim=''):
   return delim.join(map(str, list))
 
-
+'''
 def vel_domain_to_world(input, worldSize, fps):
   return input * (fps * (worldSize / imageSize))
 
@@ -274,7 +297,7 @@ def get_reynolds_number(source):
   if source == SRC_FLASHX: rn = Re_fx
   assert rn is not None
   return rn
-
+'''
 
 def print_info(string):
   print('-----------------------------------------------')

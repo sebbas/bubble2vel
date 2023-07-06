@@ -27,7 +27,8 @@ fName = None
 if args.source == UT.SRC_FLOWNET:
   fName = '../data/PB_30W_RGB/512/30W%06d.flo'
 elif args.source == UT.SRC_FLASHX:
-  fName = '../data/PB_simulation/384/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
+  #fName = '../data/PB_simulation/384/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
+  fName = '../data/PB_simulation/SingleBubble/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
 
 assert fName is not None, 'Invalid training data source'
 

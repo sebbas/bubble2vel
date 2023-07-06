@@ -113,15 +113,14 @@ class BModel(keras.Model):
     uvp = self.mlp(xyt)
 
     # The dimensionless size of a single pixel and the domain
-    pixelSize = UT.get_pixelsize_dimensionless(UT.worldSize_fx, UT.imageSize_fx, UT.L_fx)
-    domainSize = pixelSize * (UT.imageSize_fx-1)
-    domainSizeFull = pixelSize * UT.imageSize_fx
+    #pixelSize = UT.get_pixelsize_dimensionless(UT.worldSize_fx, UT.imageSize_fx, UT.L_fx)
+    #domainSize = pixelSize * (UT.imageSize_fx-1)
 
     # Use hard boundary condition
     # Reproduces exact values in boundary and filter networks effects near boundaries
     if self.hardBc:
       xy    = inputs[0]
-      xy   /= domainSize # Normalize to [0,1] for IDW calculation
+      xy /= UT.dimlessMax # Normalize to [0,1] for IDW calculation
       x, y  = xy[:,0], xy[:,1]
 
       uvpBc = inputs[4]
@@ -130,7 +129,7 @@ class BModel(keras.Model):
       # (1) Construct g's. Gives exact bc in boundary cells, IDW interpolation value at every interior point
       # (1.1) Construct function g for velocity bc
       xyBc  = inputs[3]
-      xyBc /= domainSize
+      xyBc /= UT.dimlessMax
       uvBc  = uvpBc[:,:,:2] # [nBatch, nXyBc, 2]
 
       # Get all bc points where vel bc is enfored (filter out other bc points)
@@ -144,7 +143,7 @@ class BModel(keras.Model):
 
       # (1.2) Construct function g for pressure bc
       xyBc  = inputs[3]
-      xyBc /= domainSize
+      xyBc /= UT.dimlessMax
       pBc   = uvpBc[:,:,2:] # [nBatch, nXyBc, 1]
 
       # Get all bc points where pressure bc is enfored (filter out other bc points)
@@ -327,7 +326,7 @@ class BModel(keras.Model):
 
       #tf.print(len(self.trainable_variables))
 
-      usingReLoBRaLoLoss = 1
+      usingReLoBRaLoLoss = 0
       if usingReLoBRaLoLoss:
         losses = [uMse, vMse, pdeMse0, pdeMse1, pdeMse2]
 

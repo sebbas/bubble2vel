@@ -109,10 +109,10 @@ nFrames    = dataSet.get_num_frames()
 nPointsPerFrame = dataSet.get_num_total_pts()
 
 assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
-if args.source == UT.SRC_FLOWNET:
-  worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
-if args.source == UT.SRC_FLASHX:
-  worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
+#if args.source == UT.SRC_FLOWNET:
+#  worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
+#if args.source == UT.SRC_FLASHX:
+#  worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
 # Create model
 nameStr, paramsStr = args.name, ''
@@ -128,7 +128,7 @@ modelName = nameStr + archStr + paramsStr
 #with BM.strategy.scope():
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
                       alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
-                      Re=UT.get_reynolds_number(args.source), hardBc=args.hardBc)
+                      Re=UT.Re, hardBc=args.hardBc)
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))#, run_eagerly=1)
 bubbleNet.preview()
 
@@ -164,10 +164,8 @@ for i in range(1, numIter+1):
   print('{} training points and {} steps/epoch, {} validation points and {} steps/epoch'.format(nTrain, nTrainStepsEpoch, nValid, nValidStepsEpoch))
 
   # Generators
-  trainGen = dataSet.generate_train_valid_batch(0, nTrain, worldSize, imageSize, fps, V, L, T, \
-                                                batchSize=batchSize, shuffle=False)
-  validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, worldSize, imageSize, fps, V, L, T, \
-                                                batchSize=batchSize, shuffle=False)
+  trainGen = dataSet.generate_train_valid_batch(0, nTrain, batchSize=batchSize, shuffle=False)
+  validGen = dataSet.generate_train_valid_batch(nTrain, nSamples, batchSize=batchSize, shuffle=False)
   # Training
   bubbleNet.fit(
         trainGen,

@@ -23,7 +23,7 @@ parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
 
 # Plotting options
 parser.add_argument('-xy', '--xyPred', type=int, nargs=3, default=[1, 1, 1],
-                    help='predict uvp at wall, fluid, and/or data points')
+                    help='predict uvp at interface, in fluid, and/or at walls')
 
 # Model being used for predictions
 parser.add_argument('-n', '--name', default=None,
@@ -65,16 +65,18 @@ cmap                   = 'jet'
 relErrULst, relErrVLst = [], []
 
 assert source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
-if source == UT.SRC_FLOWNET:
-  worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
-if source == UT.SRC_FLASHX:
-  worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
+#if source == UT.SRC_FLOWNET:
+#  worldSize, imageSize, fps, V, L, T = UT.worldSize, UT.imageSize, UT.fps, UT.V, UT.L, UT.T
+#if source == UT.SRC_FLASHX:
+#  worldSize, imageSize, fps, V, L, T = UT.worldSize_fx, UT.imageSize_fx, UT.fps_fx, UT.V_fx, UT.L_fx, UT.T_fx
 
-# Generators
-predGen = dataSet.generate_predict_pts(0, numPredFrames, worldSize, imageSize, fps, L, T, xyPred=args.xyPred, resetTime=True, zeroMean=False)
-uvpPred = bubbleNet.predict(predGen)
-predVels = uvpPred[:, :UT.nDim]
-predP = copy.deepcopy(uvpPred[:, 2])
+withPredict = 1
+if withPredict:
+  # Generators
+  predGen = dataSet.generate_predict_pts(0, numPredFrames, xyPred=args.xyPred, resetTime=True, zeroMean=False)
+  uvpPred = bubbleNet.predict(predGen)
+  predVels = uvpPred[:, :UT.nDim]
+  predP = copy.deepcopy(uvpPred[:, 2])
 
 # Convert predvels from dimensionless to world to domain space
 if source == UT.SRC_FLOWNET:
@@ -134,10 +136,10 @@ for f in range(0, numPredFrames):
       uvpOrig = np.concatenate((uvpOrig, uvpWalls))
 
     # Use coarser plot when plotting collocation points
-    arrow_res = 2 if not args.xyPred[1] else 8
+    arrow_res = 1 if not args.xyPred[1] else 4
 
-    origvelGrid = np.zeros((size[0], size[1], UT.nDim + 1))
-    origvelMag  = np.zeros((size))
+    origvelGrid = np.zeros((size[1], size[0], UT.nDim + 1))
+    origvelMag  = np.zeros((size[1], size[0]))
 
     for xyt, uvp in zip(xytOrig, uvpOrig):
       xi, yi = int(xyt[0]), int(xyt[1])
@@ -147,6 +149,7 @@ for f in range(0, numPredFrames):
     UT.save_image(origvelGrid[:,:,0], '{}/origvels/raw'.format(sourceName), 'origvelsx_raw', frame, cmap='jet')
     UT.save_image(origvelGrid[:,:,1], '{}/origvels/raw'.format(sourceName), 'origvelsy_raw', frame, cmap='jet')
     UT.save_image(origvelMag, '{}/origvels/raw'.format(sourceName), 'origvelsmag_raw', frame)
+    UT.save_image(origvelGrid[:,:,2], '{}/origvels/raw'.format(sourceName), 'phi_raw', frame, cmap='jet')
 
     if UT.PRINT_DEBUG:
       print('origvel u [{}, {}], v [{}, {}]'.format( \
@@ -161,11 +164,11 @@ for f in range(0, numPredFrames):
 
   ### Prediction vel plots
 
-  if predVels is not None:
+  if withPredict and predVels is not None:
 
-    predvelGrid = np.zeros((size[0], size[1], UT.nDim))
-    predvelMag  = np.zeros((size))
-    predPGrid   = np.zeros((size))
+    predvelGrid = np.zeros((size[1], size[0], UT.nDim))
+    predvelMag  = np.zeros((size[1], size[0]))
+    predPGrid   = np.zeros((size[1], size[0]))
 
     cnt = 0
     for xyt in xytOrig:

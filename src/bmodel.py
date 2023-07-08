@@ -36,7 +36,7 @@ class BModel(keras.Model):
     self.beta  = beta
     self.gamma = gamma
     self.delta = delta
-    self.Re    = Re
+    self.Re    = tf.Variable(Re, trainable=True)
     self.hardBc = hardBc
     # ---- dicts for metrics and statistics ---- #
     # Save gradients' statistics per layer
@@ -45,7 +45,7 @@ class BModel(keras.Model):
     self.trainMetrics = {}
     self.validMetrics = {}
     # add metrics
-    names = ['loss', 'uMse', 'vMse', 'pMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'pMae', 'uMseWalls', 'vMseWalls', 'pMseWalls', 'uMseInit', 'vMseInit',]
+    names = ['loss', 'uMse', 'vMse', 'pMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'pMae', 'uMseWalls', 'vMseWalls', 'pMseWalls', 'uMseInit', 'vMseInit', 'Re']
     for key in names:
       self.trainMetrics[key] = keras.metrics.Mean(name='train_'+key)
       self.validMetrics[key] = keras.metrics.Mean(name='valid_'+key)
@@ -413,6 +413,7 @@ class BModel(keras.Model):
     self.trainMetrics['pMseWalls'].update_state(pMseWalls)
     self.trainMetrics['uMseInit'].update_state(uMseInit)
     self.trainMetrics['vMseInit'].update_state(vMseInit)
+    self.trainMetrics['Re'].update_state(self.Re)
     w = tf.squeeze(w)
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
@@ -471,6 +472,7 @@ class BModel(keras.Model):
     self.validMetrics['pMseWalls'].update_state(pMseWalls)
     self.validMetrics['uMseInit'].update_state(uMseInit)
     self.validMetrics['vMseInit'].update_state(vMseInit)
+    self.validMetrics['Re'].update_state(self.Re)
     w = tf.squeeze(w)
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint

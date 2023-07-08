@@ -1193,8 +1193,9 @@ class BubbleDataSet:
   def get_num_total_pts(self):
     nIfacePnt = self.nIfacePnt * self.nTotalFrames if self.nIfacePnt > -1 else sum(self.nBubble[:])
     nWallPnt = self.nWallPnt * self.nTotalFrames if self.nWallPnt > -1 else sum(self.nWalls[:])
-
-    return self.nIcondPnt + nIfacePnt + self.nColPnt + nWallPnt
+    nColPnt = self.nColPnt * self.nTotalFrames
+    nIcondPnt = self.nIcondPnt * self.nTotalFrames
+    return nIfacePnt + nWallPnt + nColPnt + nIcondPnt
 
 
   def get_num_fluid(self, fromFrame, toFrame):

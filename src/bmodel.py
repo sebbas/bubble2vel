@@ -469,8 +469,8 @@ class BModel(keras.Model):
     self.validMetrics['uMseWalls'].update_state(uMseWalls)
     self.validMetrics['vMseWalls'].update_state(vMseWalls)
     self.validMetrics['pMseWalls'].update_state(pMseWalls)
-    self.trainMetrics['uMseInit'].update_state(uMseInit)
-    self.trainMetrics['vMseInit'].update_state(vMseInit)
+    self.validMetrics['uMseInit'].update_state(uMseInit)
+    self.validMetrics['vMseInit'].update_state(vMseInit)
     w = tf.squeeze(w)
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint

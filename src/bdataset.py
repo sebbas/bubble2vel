@@ -1071,6 +1071,7 @@ class BubbleDataSet:
       mask = self.get_wall_mask(self.xytIface)
       self.xytIface = self.xytIface[mask]
       self.uvpIface = self.uvpIface[mask]
+      print('Using all {} available interface points'.format(numPoints))
     else:
       nPts = self.nIfacePnt * numFrames
       self.xytIface = np.zeros((nPts, self.N_IN_VAR))
@@ -1084,6 +1085,7 @@ class BubbleDataSet:
       self.xytWalls = copy.deepcopy(self.xytDomain[:numPoints, :])
       self.uvpWalls = copy.deepcopy(self.uvpDomain[:numPoints, :])
       self.idWalls = copy.deepcopy(self.idDomain)
+      print('Using all {} available wall points'.format(numPoints))
     else:
       nPts = self.nWallPnt * numFrames
       self.xytWalls = np.zeros((nPts, self.N_IN_VAR))
@@ -1188,25 +1190,11 @@ class BubbleDataSet:
     print('Dataset: size [{},{}], frames {}'.format(self.size[0], self.size[1], self.nTotalFrames))
 
 
-  def get_num_icond_pts(self):
-    return self.nIcondPnt
-
-
-  def get_num_wall_pts(self):
-    return self.nWallPnt
-
-
-  def get_num_iface_pts(self):
-    return self.nIfacePnt
-
-
-  def get_num_col_pts(self):
-    return self.nColPnt
-
-
   def get_num_total_pts(self):
-    return self.get_num_icond_pts() + self.get_num_wall_pts() + \
-           self.get_num_iface_pts() + self.get_num_col_pts()
+    nIfacePnt = self.nIfacePnt * self.nTotalFrames if self.nIfacePnt > -1 else sum(self.nBubble[:])
+    nWallPnt = self.nWallPnt * self.nTotalFrames if self.nWallPnt > -1 else sum(self.nWalls[:])
+
+    return self.nIcondPnt + nIfacePnt + self.nColPnt + nWallPnt
 
 
   def get_num_fluid(self, fromFrame, toFrame):

@@ -1191,8 +1191,8 @@ class BubbleDataSet:
 
 
   def get_num_total_pts(self):
-    nIfacePnt = self.nIfacePnt * self.nTotalFrames if self.nIfacePnt > -1 else sum(self.nBubble[:])
-    nWallPnt = self.nWallPnt * self.nTotalFrames if self.nWallPnt > -1 else sum(self.nWalls[:])
+    nIfacePnt = self.nIfacePnt * self.nTotalFrames if self.nIfacePnt > -1 else self.xytIface.shape[0]
+    nWallPnt = self.nWallPnt * self.nTotalFrames if self.nWallPnt > -1 else self.xytWalls.shape[0]
     nColPnt = self.nColPnt * self.nTotalFrames
     nIcondPnt = self.nIcondPnt * self.nTotalFrames
     return nIfacePnt + nWallPnt + nColPnt + nIcondPnt

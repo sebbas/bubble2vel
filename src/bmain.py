@@ -112,7 +112,6 @@ nFrames    = dataSet.get_num_frames()
 if withBatchResampling:
   nPointsPerFrame = args.nWallPoint + args.nColPoint + args.nIfacePoint + args.nIcondPoint
   assert args.nWallPoint > -1 and args.nColPoint > -1 and args.nIfacePoint > -1 and args.nIcondPoint > -1, "Must specify exact number of points per category"
-nPointsTotal = dataSet.get_num_total_pts()
 
 assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 #if args.source == UT.SRC_FLOWNET:
@@ -158,7 +157,7 @@ for i in range(1, numIter+1):
   numFrames = i if withBatchResampling else nFrames
   dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
 
-  nSamples = nPointsPerFrame * i if withBatchResampling else nPointsTotal
+  nSamples = nPointsPerFrame * i if withBatchResampling else dataSet.get_num_total_pts()
   nTrain   = int(nSamples * splitRatio)
   # Ensure training samples fit evenly
   nTrain   = args.batchSize * round(nTrain / args.batchSize)
@@ -166,7 +165,7 @@ for i in range(1, numIter+1):
   nTrainStepsEpoch = nTrain // batchSize
   nValidStepsEpoch = nValid // batchSize
 
-  print('{} total points from {} frames, {} in training with {} steps/epoch, {} in validation with {} steps/epoch'.format(nPointsTotal, nFrames, nTrain, nTrainStepsEpoch, nValid, nValidStepsEpoch))
+  print('{} total points from {} frames, {} in training with {} steps/epoch, {} in validation with {} steps/epoch'.format(nSamples, nFrames, nTrain, nTrainStepsEpoch, nValid, nValidStepsEpoch))
 
   # Generators
   trainGen = dataSet.generate_train_valid_batch(0, nTrain, batchSize=batchSize, shuffle=False)

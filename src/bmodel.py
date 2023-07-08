@@ -18,11 +18,11 @@ strategy = tf.distribute.MirroredStrategy()
 
 class BModel(keras.Model):
   def __init__(self, width=[150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 3],\
-               alpha=[1.0, 1.0, 0.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0],\
+               alpha=[1.0, 1.0, 0.0], beta=[1e-2, 1e-2, 1e-2], gamma=[1e-4, 1e-4, 0.0], delta=[1.0, 1.0], \
                reg=None, saveGradStat=False, Re=3.5e4, hardBc=False, **kwargs):
     super(BModel, self).__init__(**kwargs)
-    print('Creating Model with alpha={}, beta={}, gamma={}, Re={}'.format( \
-          alpha, beta, gamma, Re))
+    print('Creating Model with alpha={}, beta={}, gamma={}, delta={}, Re={}'.format( \
+          alpha, beta, gamma, delta, Re))
 
     self.width = width
     self.reg   = reg
@@ -35,6 +35,7 @@ class BModel(keras.Model):
     self.alpha = alpha
     self.beta  = beta
     self.gamma = gamma
+    self.delta = delta
     self.Re    = Re
     self.hardBc = hardBc
     # ---- dicts for metrics and statistics ---- #
@@ -44,7 +45,7 @@ class BModel(keras.Model):
     self.trainMetrics = {}
     self.validMetrics = {}
     # add metrics
-    names = ['loss', 'uMse', 'vMse', 'pMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'pMae', 'uMseWalls', 'vMseWalls', 'pMseWalls']
+    names = ['loss', 'uMse', 'vMse', 'pMse', 'pde0', 'pde1', 'pde2', 'uMae', 'vMae', 'pMae', 'uMseWalls', 'vMseWalls', 'pMseWalls', 'uMseInit', 'vMseInit',]
     for key in names:
       self.trainMetrics[key] = keras.metrics.Mean(name='train_'+key)
       self.validMetrics[key] = keras.metrics.Mean(name='valid_'+key)
@@ -52,7 +53,7 @@ class BModel(keras.Model):
     ## i even for weights, odd for bias
     if self.saveGradStat:
       for i in range(len(width)):
-        for prefix in ['u_', 'v_', 'p_', 'pde0_', 'pde1_', 'pde2_', 'uWalls_', 'vWalls_', 'pWalls_']:
+        for prefix in ['u_', 'v_', 'p_', 'pde0_', 'pde1_', 'pde2_', 'uWalls_', 'vWalls_', 'pWalls_', 'uInit_', 'vInit_']:
           for suffix in ['w_avg', 'w_std', 'b_avg', 'b_std']:
             key = prefix + repr(i) + suffix
             self.trainMetrics[key] = keras.metrics.Mean(name='train '+key)
@@ -247,9 +248,8 @@ class BModel(keras.Model):
     # Add initial condition loss to data loss
     initCondMask = tf.cast(tf.equal(w, 3), tf.float32)
     nInitCondPoint = tf.reduce_sum(initCondMask) + 1.0e-10
-    uMse += tf.reduce_sum(tf.square(uv[:,0] - uPred) * initCondMask) / nInitCondPoint
-    vMse += tf.reduce_sum(tf.square(uv[:,1] - vPred) * initCondMask) / nInitCondPoint
-    pMse += tf.reduce_sum(tf.square(uv[:,2] - pPred) * initCondMask) / nInitCondPoint
+    uMseInit = tf.reduce_sum(tf.square(uv[:,0] - uPred) * initCondMask) / nInitCondPoint
+    vMseInit = tf.reduce_sum(tf.square(uv[:,1] - vPred) * initCondMask) / nInitCondPoint
 
     # Compute PDE loss
     #colMask = tf.cast(tf.equal(w, 0), tf.float32)
@@ -275,7 +275,7 @@ class BModel(keras.Model):
     pressureTrue = 0
     pMseWalls = tf.reduce_sum(tf.square(pressureTrue - pPred) * wallMask) / nWallsPoint
 
-    return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls
+    return uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls, uMseInit, vMseInit
 
 
   @tf.function
@@ -321,7 +321,7 @@ class BModel(keras.Model):
 
       tape0.watch(self.trainable_variables)
 
-      uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
+      uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls, uMseInit, vMseInit = \
         self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
 
       #tf.print(len(self.trainable_variables))
@@ -376,7 +376,8 @@ class BModel(keras.Model):
       else:
         loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
                 + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
-                + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls)
+                + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
+                + self.delta[0]*uMseInit + self.delta[1]*vMseInit)
 
       loss += tf.add_n(self.losses)
     # update gradients
@@ -390,6 +391,8 @@ class BModel(keras.Model):
       uMseWallsGrad = tape0.gradient(uMseWalls, self.trainable_variables)
       vMseWallsGrad = tape0.gradient(vMseWalls, self.trainable_variables)
       pMseWallsGrad = tape0.gradient(pMseWalls, self.trainable_variables)
+      uMseInitGrad  = tape0.gradient(uMseInit,  self.trainable_variables)
+      vMseInitGrad  = tape0.gradient(vMseInit,  self.trainable_variables)
     lossGrad = tape0.gradient(loss, self.trainable_variables)
     del tape0
 
@@ -408,6 +411,8 @@ class BModel(keras.Model):
     self.trainMetrics['uMseWalls'].update_state(uMseWalls)
     self.trainMetrics['vMseWalls'].update_state(vMseWalls)
     self.trainMetrics['pMseWalls'].update_state(pMseWalls)
+    self.trainMetrics['uMseInit'].update_state(uMseInit)
+    self.trainMetrics['vMseInit'].update_state(vMseInit)
     w = tf.squeeze(w)
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
@@ -427,6 +432,8 @@ class BModel(keras.Model):
       self.record_layer_gradient(uMseWallsGrad, 'uWalls_')
       self.record_layer_gradient(vMseWallsGrad, 'vWalls_')
       self.record_layer_gradient(pMseWallsGrad, 'pWalls_')
+      self.record_layer_gradient(uMseInitGrad, 'uInit_')
+      self.record_layer_gradient(vMseInitGrad, 'vInit_')
     for key in self.trainMetrics:
       self.trainStat[key] = self.trainMetrics[key].result()
     return self.trainStat
@@ -443,12 +450,13 @@ class BModel(keras.Model):
     phi     = data[0][7]
 
     # Compute the data and pde losses
-    uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls = \
+    uvpPred, uMse, vMse, pMse, pdeMse0, pdeMse1, pdeMse2, uMseWalls, vMseWalls, pMseWalls, uMseInit, vMseInit = \
       self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
     # replica's loss, divided by global batch size
     loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse \
             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 \
-            + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls )
+            + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
+            + self.delta[0]*uMseInit + self.delta[1]*vMseInit)
 
     # Track loss and mae
     self.validMetrics['loss'].update_state(loss)
@@ -461,6 +469,8 @@ class BModel(keras.Model):
     self.validMetrics['uMseWalls'].update_state(uMseWalls)
     self.validMetrics['vMseWalls'].update_state(vMseWalls)
     self.validMetrics['pMseWalls'].update_state(pMseWalls)
+    self.trainMetrics['uMseInit'].update_state(uMseInit)
+    self.trainMetrics['vMseInit'].update_state(vMseInit)
     w = tf.squeeze(w)
     nDataPoint = tf.reduce_sum(w) + 1.0e-10
     uMae = tf.reduce_sum(tf.abs((uvpPred[:,0] - uv[:,0]) * w)) / nDataPoint
@@ -510,4 +520,6 @@ class BModel(keras.Model):
           self.beta[0], self.beta[1], self.beta[2]))
     print('Coefficients for domain wall loss {} {} {}'.format(\
           self.gamma[0], self.gamma[1], self.gamma[2]))
+    print('Coefficients for initial condition loss {} {}'.format(\
+          self.delta[0], self.delta[1]))
     print('--------------------------------')

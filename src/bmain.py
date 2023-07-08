@@ -42,6 +42,8 @@ parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-2, 1e-2,
                     help='coefficients for pde residual')
 parser.add_argument('-gamma', '--gamma', type=float, nargs=3, default=[1e-4, 1e-4, 1e-4],
                     help='coefficients for domain wall loss')
+parser.add_argument('-delta', '--delta', type=float, nargs=2, default=[1.0, 1.0],
+                    help='coefficients for initial condition loss')
 
 # Epochs, checkpoints
 parser.add_argument('-f', '--file', default='../data/bdata_512_56389.h5',
@@ -132,7 +134,7 @@ modelName = nameStr + archStr + paramsStr
 
 #with BM.strategy.scope():
 bubbleNet = BM.BModel(width=args.architecture, reg=args.reg,
-                      alpha=args.alpha, beta=args.beta, gamma=args.gamma, \
+                      alpha=args.alpha, beta=args.beta, gamma=args.gamma, delta=args.delta, \
                       Re=UT.Re, hardBc=args.hardBc)
 bubbleNet.compile(optimizer=keras.optimizers.Adam(learning_rate=args.lr0))#, run_eagerly=1)
 bubbleNet.preview()

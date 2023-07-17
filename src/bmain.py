@@ -36,13 +36,13 @@ parser.add_argument('-w', '--walls', type=int, nargs=4, default=[0,0,1,0],
 # Regularizer coefficients
 parser.add_argument('-r', '--reg', type=float, nargs='*', default=None,
                     help='l2 regularization')
-parser.add_argument('-alpha', '--alpha', type=float, nargs=3, default=[1.0, 1.0, 0.0],
+parser.add_argument('-alpha', '--alpha', type=float, nargs=4, default=[1.0, 1.0, 0.0, 1.0],
                     help='coefficients for data loss')
-parser.add_argument('-beta', '--beta', type=float, nargs=3, default=[1e-2, 1e-2, 1e-2],
+parser.add_argument('-beta', '--beta', type=float, nargs=4, default=[1e-2, 1e-2, 1e-2, 1e-2],
                     help='coefficients for pde residual')
 parser.add_argument('-gamma', '--gamma', type=float, nargs=3, default=[1e-4, 1e-4, 1e-4],
                     help='coefficients for domain wall loss')
-parser.add_argument('-delta', '--delta', type=float, nargs=2, default=[1.0, 1.0],
+parser.add_argument('-delta', '--delta', type=float, nargs=3, default=[1.0, 1.0, 1.0],
                     help='coefficients for initial condition loss')
 
 # Epochs, checkpoints
@@ -102,7 +102,7 @@ dataSet.restore(args.file)
 dataSet.prepare_hard_boundary_condition()
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(UT.nDim + 1)
+args.architecture.append(UT.nDim + 2)
 
 withBatchResampling = 0
 

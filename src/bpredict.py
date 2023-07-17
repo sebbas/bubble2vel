@@ -45,7 +45,7 @@ assert args.name is not None, 'Must supply model name'
 assert args.startFrame <= args.endFrame, 'Start frame must be smaller/equal than/to end frame'
 
 # Ensure correct output size at end of input architecture
-args.architecture.append(UT.nDim + 1)
+args.architecture.append(UT.nDim + 2)
 
 dataSet = BD.BubbleDataSet()
 dataSet.restore(args.file)
@@ -77,6 +77,7 @@ if withPredict:
   uvpPred = bubbleNet.predict(predGen)
   predVels = uvpPred[:, :UT.nDim]
   predP = copy.deepcopy(uvpPred[:, 2])
+  predC = copy.deepcopy(uvpPred[:, 3])
 
 # Convert predvels from dimensionless to world to domain space
 if source == UT.SRC_FLOWNET:
@@ -169,6 +170,7 @@ for f in range(0, numPredFrames):
     predvelGrid = np.zeros((size[1], size[0], UT.nDim))
     predvelMag  = np.zeros((size[1], size[0]))
     predPGrid   = np.zeros((size[1], size[0]))
+    predCGrid   = np.zeros((size[1], size[0]))
 
     cnt = 0
     for xyt in xytOrig:
@@ -178,6 +180,7 @@ for f in range(0, numPredFrames):
       predvelMag[yi, xi] = np.sqrt(np.square(vel[0]) + np.square(vel[1]))
       predvelGrid[yi, xi] = vel
       predPGrid[yi, xi] = predP[cnt + predVelOffset]
+      predCGrid[yi, xi] = predC[cnt + predVelOffset]
       cnt += 1
 
     # Start of the predvels of next frame
@@ -196,6 +199,7 @@ for f in range(0, numPredFrames):
 
     UT.save_image(predvelMag, '{}/predvels/raw'.format(sourceName), 'predvels_raw', frame)
     UT.save_image(predPGrid, '{}/predvels/raw'.format(sourceName), 'predp_raw', frame)
+    UT.save_image(predCGrid, '{}/predvels/raw'.format(sourceName), 'predc_raw', frame)
 
     if UT.PRINT_DEBUG:
       print('predvel u [{}, {}], v [{}, {}]'.format( \
@@ -206,6 +210,7 @@ for f in range(0, numPredFrames):
 
     UT.save_plot(predvelMag, '{}/predvels/plots'.format(sourceName), 'predvelsmag_plt', frame, size=size, cmin=cmin, cmax=cmax, cmap=cmap)
     UT.save_plot(predPGrid, '{}/predvels/plots'.format(sourceName), 'predp_plt', frame, size=size, cmin=cmin, cmax=cmax)
+    UT.save_plot(predCGrid, '{}/predvels/plots'.format(sourceName), 'predc_plt', frame, size=size, cmin=cmin, cmax=cmax)
 
     UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_stream', frame, size=size, type='stream')
     UT.save_velocity(predvelGrid, '{}/predvels/plots'.format(sourceName), 'velocity_vector', frame, size=size, type='quiver', arrow_res=arrow_res, filterZero=True)

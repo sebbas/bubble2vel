@@ -288,7 +288,7 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1e4)):
+  def generate_predict_pts(self, begin, end, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1.5e4)):
     print('Generating prediction points')
 
     for f in range(begin, end):
@@ -1216,6 +1216,14 @@ class BubbleDataSet:
 
   def get_dim(self):
     return self.dim
+
+
+  def get_start_frame(self):
+    return self.startFrame
+
+
+  def get_end_frame(self):
+    return self.endFrame
 
 
   def get_source(self):

@@ -42,7 +42,6 @@ parser.add_argument('-hbc', '--hardBc', default=False, action='store_true',
 args = parser.parse_args()
 
 assert args.name is not None, 'Must supply model name'
-assert args.startFrame <= args.endFrame, 'Start frame must be smaller/equal than/to end frame'
 
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 2)
@@ -58,8 +57,15 @@ size                   = dataSet.get_size()
 source                 = dataSet.get_source()
 sourceName             = dataSet.get_source_name()
 numPredFrames          = args.predFrames
-startFrame             = args.startFrame
+
+startFrameD, endFrameD = dataSet.get_start_frame(), dataSet.get_end_frame()
+startFramePlot         = args.startFrame
+startFrame             = args.startFrame - startFrameD
 endFrame               = startFrame + numPredFrames
+assert startFrame >= 0 and endFrame >= 0, 'Invalid start / end frame: {} and {}'.format(startFrame, endFrame)
+assert args.startFrame <= args.endFrame, 'Start frame must be smaller/equal than/to end frame'
+assert endFrameD - endFrame >= 0, 'Prediction end frame larger than dataset end frame'
+
 cmin, cmax             = 0, 1.5
 cmap                   = 'jet'
 relErrULst, relErrVLst = [], []
@@ -73,7 +79,7 @@ assert source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 withPredict = 1
 if withPredict:
   # Generators
-  predGen = dataSet.generate_predict_pts(0, numPredFrames, xyPred=args.xyPred, resetTime=True, zeroMean=False)
+  predGen = dataSet.generate_predict_pts(startFrame, endFrame, xyPred=args.xyPred, resetTime=True, zeroMean=False)
   uvpPred = bubbleNet.predict(predGen)
   predVels = uvpPred[:, :UT.nDim]
   predP = copy.deepcopy(uvpPred[:, 2])
@@ -102,9 +108,9 @@ if source == UT.SRC_FLOWNET:
 # Plots
 
 predVelOffset = 0 # just a helper var to find beginning of next frame in predVels array
-for f in range(0, numPredFrames):
+for cnt, f in enumerate(range(startFrame, endFrame)):
 
-  frame = f + startFrame
+  frame = startFramePlot + cnt
   ### Original vel plots
 
   plotOrig = True

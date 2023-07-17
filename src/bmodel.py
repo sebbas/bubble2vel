@@ -445,7 +445,7 @@ class BModel(keras.Model):
       self.record_layer_gradient(uMseGrad, 'u_')
       self.record_layer_gradient(vMseGrad, 'v_')
       self.record_layer_gradient(pMseGrad, 'p_')
-      self.record_layer_gradient(pMseGrad, 'c_')
+      self.record_layer_gradient(cMseGrad, 'c_')
       self.record_layer_gradient(pdeMse0Grad, 'pde0_')
       self.record_layer_gradient(pdeMse1Grad, 'pde1_')
       self.record_layer_gradient(pdeMse2Grad, 'pde2_')

@@ -778,7 +778,7 @@ class BubbleDataSet:
         neighbors = [(i+1, j), (i-1, j), (i, j+1), (i, j-1)]
         for ng in neighbors:
           ni, nj = ng[0], ng[1]
-          if ni < 0 or ni >= sizeX or nj < 0 or nj >= sizeY:
+          if ni < 0 or ni >= sizeY or nj < 0 or nj >= sizeX:
             continue
           # Thicken interface from the inside or outside
           if fromInside:

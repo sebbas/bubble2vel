@@ -1009,7 +1009,7 @@ class BubbleDataSet:
       UT.save_velocity_bins(self.uvpBubble[:, 1], '{}/histograms'.format(self.sourceName), 'bc_y_bins', frame, bmin=-3.0, bmax=3.0, bstep=0.1)
 
 
-  def _fill_batch_arrays(self, xytTarget, uvpTarget, nFrames, nPoints, pType, idsTarget=None):
+  def _fill_batch_arrays(self, xytTarget, uvpTarget, nFrames, nPoints, pType, idsTarget=None, replace=False):
     UT.print_info('Selecting {} points'.format(pType))
     rng = np.random.default_rng(2022)
     s = 0
@@ -1049,7 +1049,7 @@ class BubbleDataSet:
       # Insert random selection of fluid coords into data array
       if UT.PRINT_DEBUG: print('Taking {} {} points out of {} available'.format(nPoints, pType, xyt.shape[0]))
       indices = np.arange(0, xyt.shape[0])
-      randIndices = rng.choice(indices, size=nPoints, replace=False)
+      randIndices = rng.choice(indices, size=nPoints, replace=replace)
 
       e = s + nPoints
       xytTarget[s:e, :] = xyt[randIndices, :]
@@ -1076,7 +1076,8 @@ class BubbleDataSet:
       nPts = self.nIfacePnt * numFrames
       self.xytIface = np.zeros((nPts, self.N_IN_VAR))
       self.uvpIface = np.zeros((nPts, self.N_OUT_VAR))
-      self._fill_batch_arrays(self.xytIface, self.uvpIface, nFrames=numFrames, nPoints=self.nIfacePnt, pType='iface')
+      replace = (nPts > numPoints)
+      self._fill_batch_arrays(self.xytIface, self.uvpIface, nFrames=numFrames, nPoints=self.nIfacePnt, pType='iface', replace=replace)
 
 
   def select_wall_points(self, numFrames, useAll=False):
@@ -1091,7 +1092,8 @@ class BubbleDataSet:
       self.xytWalls = np.zeros((nPts, self.N_IN_VAR))
       self.uvpWalls = np.zeros((nPts, self.N_OUT_VAR))
       self.idWalls = np.zeros((nPts))
-      self._fill_batch_arrays(self.xytWalls, self.uvpWalls, nFrames=numFrames, nPoints=self.nWallPnt, pType='wall', idsTarget=self.idWalls)
+      replace = (nPts > numPoints)
+      self._fill_batch_arrays(self.xytWalls, self.uvpWalls, nFrames=numFrames, nPoints=self.nWallPnt, pType='wall', idsTarget=self.idWalls, replace=replace)
 
 
   def select_collocation_points(self, numFrames, default=False):

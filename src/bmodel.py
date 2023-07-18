@@ -81,13 +81,13 @@ class BModel(keras.Model):
     self.iter1 = 1
 
 
-  def _getG(self, xy, xyBc, bc, eps=1e-10):
+  def _getG(self, xy, xyBc, bc, eps=1e-10, exp=2):
     xyExp = tf.expand_dims(xy, axis=1)       # [nBatch, 1, nDim]
     dist = tf.square(xyExp - xyBc)           # [nBatch, nXyBc, nDim]
-    dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nxyBc]
+    dist = tf.reduce_sum(dist, axis=-1)      # [nBatch, nXyBc]
     #dist = tf.math.sqrt(dist)               # [nBatch, nXyBc]
-    wi = tf.pow(1.0 / (dist + eps), 2)       # [nBatch, nXyBc]
-    wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nxyBc, 1]
+    wi = tf.pow(1.0 / (dist + eps), exp)     # [nBatch, nXyBc]
+    wi = tf.expand_dims(wi, axis=-1)         # [nBatch, nXyBc, 1]
     denom = tf.reduce_sum(wi, axis=1)        # [nBatch, 1, nDim]
     numer = tf.reduce_sum(wi * bc, axis=1)   # [nBatch, 1, dimBc]
     g = numer / denom                        # [nBatch, dimBc]
@@ -146,7 +146,7 @@ class BModel(keras.Model):
       # (1.2) Construct function g for pressure bc
       xyBc  = inputs[3]
       xyBc /= UT.dimlessMax
-      pBc   = uvpBc[:,:,2:] # [nBatch, nXyBc, 1]
+      pBc   = uvpBc[:,:,2:3] # [nBatch, nXyBc, 1]
 
       # Get all bc points where pressure bc is enfored (filter out other bc points)
       walls = tf.cast(tf.equal(idsBc, 21), tf.float32) # top

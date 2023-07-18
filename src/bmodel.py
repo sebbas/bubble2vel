@@ -449,13 +449,13 @@ class BModel(keras.Model):
       self.record_layer_gradient(pdeMse0Grad, 'pde0_')
       self.record_layer_gradient(pdeMse1Grad, 'pde1_')
       self.record_layer_gradient(pdeMse2Grad, 'pde2_')
-      self.record_layer_gradient(pdeMse2Grad, 'pde3_')
+      self.record_layer_gradient(pdeMse3Grad, 'pde3_')
       self.record_layer_gradient(uMseWallsGrad, 'uWalls_')
       self.record_layer_gradient(vMseWallsGrad, 'vWalls_')
       self.record_layer_gradient(pMseWallsGrad, 'pWalls_')
       self.record_layer_gradient(uMseInitGrad, 'uInit_')
       self.record_layer_gradient(vMseInitGrad, 'vInit_')
-      self.record_layer_gradient(vMseInitGrad, 'cInit_')
+      self.record_layer_gradient(cMseInitGrad, 'cInit_')
     for key in self.trainMetrics:
       self.trainStat[key] = self.trainMetrics[key].result()
     return self.trainStat

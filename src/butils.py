@@ -52,13 +52,14 @@ imageSize_fx = 384
 '''
 
 imageSize   = [96.0, 144.0]
-dimlessSize = [4.0, 6.0]
+domainSize  = [4.0, 6.0]
 Re = 303.0
 timeScale = 0.1
-posScale = [a / b for a, b in zip(imageSize, dimlessSize)]
+posScale = [a / b for a, b in zip(imageSize, domainSize)]
 assert posScale[0] == posScale[1]
 posScale = posScale[0]
-dimlessMax = [(imageSize[0]-1) / posScale, (imageSize[1]-1) / posScale]
+dimlessSize = [(size-1) / posScale for size in imageSize]
+dimlessMax = np.max(dimlessSize)
 
 def get_xy_scaled(xy):
   return xy / posScale

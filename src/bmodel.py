@@ -97,8 +97,8 @@ class BModel(keras.Model):
   def _getPhi(self, x, y, walls):
     phi = 1.0
     if walls[0]: phi *= x     # left
-    if walls[1]: phi *= (1-y) # top
-    if walls[2]: phi *= (1-x) # right
+    if walls[1]: phi *= (UT.dimlessSize[1] / UT.dimlessMax - y) # top
+    if walls[2]: phi *= (UT.dimlessSize[0] / UT.dimlessMax - x) # right
     if walls[3]: phi *= y     # bottom
     return phi
 
@@ -174,7 +174,8 @@ class BModel(keras.Model):
       phiVel   = tf.expand_dims(phiVel, axis=-1)
       phiPres  = tf.expand_dims(phiPres, axis=-1)
       uv       = gVel + uv * phiVel               # [nBatch, nDim]
-      p        = gPres + p * phiPres              # [nBatch, nDim]
+      # TODO: Disabling hard p for now
+      #p        = gPres + p * phiPres              # [nBatch, nDim]
       uvp      = tf.concat([uv, p, c], axis=-1)   # [nBatch, nDim + 1]
 
     return uvp
@@ -272,6 +273,7 @@ class BModel(keras.Model):
 
     # Compute domain wall loss for velocity
     wallMask = tf.cast(tf.equal(w, 20), tf.float32)  # left
+    wallMask += tf.cast(tf.equal(w, 21), tf.float32) # top
     wallMask += tf.cast(tf.equal(w, 22), tf.float32) # right
     wallMask += tf.cast(tf.equal(w, 23), tf.float32) # bottom
     nWallsPoint = tf.reduce_sum(wallMask) + 1.0e-10

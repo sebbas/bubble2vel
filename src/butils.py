@@ -127,7 +127,7 @@ def save_video(subdir, name, imgDir, fps=5):
 
 
 def save_velocity(src, subdir, name, frame, size=(512,512,1), invertY=False, \
-                  type='stream', arrow_res=1, cmin=0.0, cmax=5.0, density=5.0, \
+                  type='stream', arrow_res=1, cmin=0.0, cmax=1.5, density=5.0, \
                   filterZero=False, cmap='jet'):
   fig, ax = plt.subplots(1, 1, figsize=get_figure_size(size))
   x = np.arange(0, int(size[0]), arrow_res)

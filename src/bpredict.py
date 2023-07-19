@@ -79,7 +79,7 @@ assert source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
 withPredict = 1
 if withPredict:
   # Generators
-  predGen = dataSet.generate_predict_pts(startFrame, endFrame, xyPred=args.xyPred, resetTime=True, zeroMean=False)
+  predGen = dataSet.generate_predict_pts(startFrame, endFrame, xyPred=args.xyPred, resetTime=True, zeroMean=True)
   uvpPred = bubbleNet.predict(predGen)
   predVels = uvpPred[:, :UT.nDim]
   predP = copy.deepcopy(uvpPred[:, 2])

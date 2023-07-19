@@ -142,8 +142,8 @@ bubbleNet.preview()
 # Callbacks
 bubbleCB = [KC.ModelCheckpoint(filepath='./' + modelName + '/checkpoint', monitor='val_loss', save_best_only=True, save_weights_only=True, verbose=True),
             KC.ReduceLROnPlateau(monitor='loss', min_delta=0.01, patience=args.patience, min_lr=args.lrmin),
-            KC.CSVLogger(modelName+'.log', append=True),
-            KC.EarlyStopping(monitor='loss', patience=32, restore_best_weights=True, verbose=True)]
+            KC.CSVLogger(modelName+'.log', append=True)] #,
+            #KC.EarlyStopping(monitor='loss', patience=32, restore_best_weights=True, verbose=True)]
 
 # Load checkpoints if restart
 if args.restart:
@@ -157,7 +157,7 @@ numIter = nFrames if withBatchResampling else 1
 for i in range(1, numIter+1):
   # Sample selection of points
   numFrames = i if withBatchResampling else nFrames
-  dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
+  dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=True)
 
   nSamples = nPointsPerFrame * i if withBatchResampling else dataSet.get_num_total_pts()
   nTrain   = int(nSamples * splitRatio)

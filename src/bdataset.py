@@ -288,7 +288,7 @@ class BubbleDataSet:
     return mask
 
 
-  def generate_predict_pts(self, begin, end, xyPred=[1,1,1], resetTime=True, zeroMean=True, batchSize=int(1.5e4)):
+  def generate_predict_pts(self, begin, end, xyPred=[1,1,1], resetTime=True, zeroMean=False, batchSize=int(1.5e4)):
     print('Generating prediction points')
 
     for f in range(begin, end):
@@ -360,9 +360,8 @@ class BubbleDataSet:
 
         # Shift time and position to negative range (use -1 to account for 0 in center)
         if zeroMean:
-          print(self.nTotalFrames)
           xy[:,:] -= (self.size-1) / 2
-          xyDataBc[:,:1] -= (self.size-1) / 2
+          xyDataBc[:,:] -= (self.size-1) / 2
           #t[:,0]  -= (self.nTotalFrames-1) / 2
           #xyDataBc[:,2]  -= (self.nTotalFrames-1) / 2
 
@@ -443,8 +442,7 @@ class BubbleDataSet:
 
     # Zero mean for pos range (use -1 to account for 0 in center)
     if zeroMean:
-      self.xytBatch[:,0] -= (self.size[0]-1) / 2
-      self.xytBatch[:,1] -= (self.size[1]-1) / 2
+      self.xytBatch[:,:2] -= (self.size-1) / 2
       #self.xytBatch[:,2] -= (self.nTotalFrames-1) / 2
 
     normalizeXy = False
@@ -489,7 +487,7 @@ class BubbleDataSet:
 
     # Zero mean for pos range (use -1 to account for 0 in center)
     if zeroMean:
-      self.xytDataBc[:,:1] -= (self.size-1) / 2
+      self.xytDataBc[:,:2] -= (self.size-1) / 2
       #self.xytDataBc[:,2] -= (self.nTotalFrames-1) / 2
 
     for f in range(self.nTotalFrames):

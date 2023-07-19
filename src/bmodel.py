@@ -122,7 +122,8 @@ class BModel(keras.Model):
     # Reproduces exact values in boundary and filter networks effects near boundaries
     if self.hardBc:
       xy    = inputs[0]
-      xy /= UT.dimlessMax # Normalize to [0,1] for IDW calculation
+      xy   += UT.imageOffset
+      xy   /= UT.dimlessMax # Normalize to [0,1] for IDW calculation
       x, y  = xy[:,0], xy[:,1]
 
       uvpBc = inputs[4]
@@ -131,6 +132,7 @@ class BModel(keras.Model):
       # (1) Construct g's. Gives exact bc in boundary cells, IDW interpolation value at every interior point
       # (1.1) Construct function g for velocity bc
       xyBc  = inputs[3]
+      xyBc += UT.imageOffset
       xyBc /= UT.dimlessMax
       uvBc  = uvpBc[:,:,:2] # [nBatch, nXyBc, 2]
 
@@ -145,6 +147,7 @@ class BModel(keras.Model):
 
       # (1.2) Construct function g for pressure bc
       xyBc  = inputs[3]
+      xyBc += UT.imageOffset
       xyBc /= UT.dimlessMax
       pBc   = uvpBc[:,:,2:3] # [nBatch, nXyBc, 1]
 

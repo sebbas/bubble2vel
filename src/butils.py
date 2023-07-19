@@ -59,7 +59,9 @@ posScale = [a / b for a, b in zip(imageSize, domainSize)]
 assert posScale[0] == posScale[1]
 posScale = posScale[0]
 dimlessSize = [(size-1) / posScale for size in imageSize]
+imageOffset = [(size-1)/2.0/posScale for size in imageSize] # used for scaling in hard bcs when zeromean is enabled
 dimlessMax = np.max(dimlessSize)
+
 
 def get_xy_scaled(xy):
   return xy / posScale

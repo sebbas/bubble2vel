@@ -158,7 +158,7 @@ class BModel(keras.Model):
       # (2) Construct phi's. Zero in boundary cells, getting more positive at interior points
       # (2.1) Construct function phi for velocity bc
       #phiVel = x * (1-x) * y # Filter function for left, right, and bottom domain boundaries
-      phiVel = self._getPhi(x, y, [1,0,1,1]) # Filter at left, right, and bottom domain boundaries
+      phiVel = self._getPhi(x, y, [1,1,1,1]) # Filter at left, right, and bottom domain boundaries
 
       # (2.2) Construct function phi for pressure bc
       #phiPres = (1-y)

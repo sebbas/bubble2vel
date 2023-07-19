@@ -298,6 +298,7 @@ class BubbleDataSet:
       xytFluid  = self.get_xyt_fluid(f)
       uvpWalls  = self.get_uvp_walls(f)
       xytWalls  = self.get_xyt_walls(f)
+      idsWalls  = self.get_ids_walls(f)
 
       # Get ground truth xyt and uvp of bubble, fluid, and / or domain points
       xytTarget, uvpTarget, ids = np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, self.dim + 1)), np.empty(shape=(0, 1))
@@ -323,7 +324,7 @@ class BubbleDataSet:
         xytTarget = np.concatenate((xytTarget, xytWalls))
         uvpTarget = np.concatenate((uvpTarget, uvpWalls))
         wallIds  = np.full((len(xytWalls), 1), 0)
-        ids      = np.concatenate((ids, wallIds))
+        ids      = np.concatenate((ids, np.expand_dims(idsWalls, axis=-1)))
 
       nGridPnt = len(xytTarget)
 

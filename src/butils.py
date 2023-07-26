@@ -340,3 +340,9 @@ def read_array_hdf5(arrays, fname):
 
     dFile.close()
     print('Read arrays from file {}'.format(fname))
+
+
+def divergence(grids, sp):
+  numDims = np.shape(grids)[2]
+  return np.ufunc.reduce(np.add, [np.gradient(grids[:,:,i], sp[i], axis=i) for i in range(numDims)])
+

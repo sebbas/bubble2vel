@@ -240,6 +240,13 @@ for cnt, f in enumerate(range(startFrame, endFrame)):
       UT.save_velocity(velsP, '../data', 'velP_read', frame, size=size, type='mag')
       '''
 
+    # Compute divergence of velocity grids
+    sp = [dS / iS for dS, iS in list(zip(UT.domainSize, UT.imageSize))]
+    origDiv, predDiv = UT.divergence(origvelGrid[:,:,:2], sp), UT.divergence(predvelGrid[:,:,:2], sp)
+    origDivSum, predDivSum = np.sum(origDiv), np.sum(predDiv)
+    print('Divergence origvel {}'.format(origDivSum))
+    print('Divergence predvel {}'.format(predDivSum))
+
 #print('Mean residual U: {}'.format(np.mean(relErrULst)))
 #print('Mean residual V: {}'.format(np.mean(relErrVLst)))
 

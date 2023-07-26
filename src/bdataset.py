@@ -100,7 +100,7 @@ class BubbleDataSet:
       min_offset, max_offset = [12, 0, -1], [12, 0, 0]
     elif mode == 3: # tiny single bubble
       fac = [6, 9, 1]
-      min_offset, max_offset = [1, 0, -1], [1, 0, 0]
+      min_offset, max_offset = [2, 0, -1], [2, 0, 0]
     else:
       sys.exit('Invalid mode. Mode is {}'.format(mode))
 

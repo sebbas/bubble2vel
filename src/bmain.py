@@ -114,7 +114,7 @@ batchSize  = args.batchSize
 nFrames    = dataSet.get_num_frames()
 
 if withSeq2Seq:
-  nPointsPerFrame = args.nWallPoint + args.nColPoint + args.nIfacePoint + args.nIcondPoint
+  nPointsPerFrame = args.nWallPoint + args.nColPoint + args.nIfacePoint
   assert args.nWallPoint > -1 and args.nColPoint > -1 and args.nIfacePoint > -1 and args.nIcondPoint > -1, "Must specify exact number of points per category"
 
 assert args.source in [UT.SRC_FLOWNET, UT.SRC_FLASHX], 'Invalid dataset source'
@@ -161,7 +161,7 @@ for i in range(numIter):
   numFrames = (i+1) if withSeq2Seq else nFrames
   dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
 
-  nSamples = nPointsPerFrame * (i+1) if withSeq2Seq else dataSet.get_num_total_pts()
+  nSamples = nPointsPerFrame * numFrames + args.nIcondPoint if withSeq2Seq else dataSet.get_num_total_pts()
   nTrain   = int(nSamples * splitRatio)
   # Ensure training samples fit evenly
   nTrain   = args.batchSize * round(nTrain / args.batchSize)

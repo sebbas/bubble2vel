@@ -2,6 +2,7 @@
 
 import os, sys
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import subprocess
 import h5py as h5
@@ -340,6 +341,12 @@ def read_array_hdf5(arrays, fname):
 
     dFile.close()
     print('Read arrays from file {}'.format(fname))
+
+
+def round(x, precision=4):
+  xString = tf.strings.as_string(x, precision=4)
+  xRound  = tf.strings.to_number(xString, out_type=tf.float32)
+  return xRound
 
 
 def divergence(grids, sp):

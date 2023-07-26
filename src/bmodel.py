@@ -94,11 +94,16 @@ class BModel(keras.Model):
 
 
   def _getPhi(self, x, y, walls):
+    # Round to lower precision to prevent rounding errors
+    precision = 4
+    xRound, yRound = UT.round(x, precision), UT.round(y, precision)
+    xMax, yMax = UT.round(UT.dimlessSize[0] / UT.dimlessMax, precision), UT.round(UT.dimlessSize[1] / UT.dimlessMax, precision)
+    # Assemble phi for given walls
     phi = 1.0
-    if walls[0]: phi *= x     # left
-    if walls[1]: phi *= (UT.dimlessSize[1] / UT.dimlessMax - y) # top
-    if walls[2]: phi *= (UT.dimlessSize[0] / UT.dimlessMax - x) # right
-    if walls[3]: phi *= y     # bottom
+    if walls[0]: phi *= xRound          # left
+    if walls[1]: phi *= (yMax - yRound) # top
+    if walls[2]: phi *= (xMax - xRound) # right
+    if walls[3]: phi *= yRound          # bottom
     return phi
 
 
@@ -137,6 +142,7 @@ class BModel(keras.Model):
 
       # Get all bc points where vel bc is enfored (filter out other bc points)
       walls  = tf.cast(tf.equal(idsBc, 20), tf.float32) # left
+      walls += tf.cast(tf.equal(idsBc, 21), tf.float32) # top
       walls += tf.cast(tf.equal(idsBc, 22), tf.float32) # right
       walls += tf.cast(tf.equal(idsBc, 23), tf.float32) # bottom
       mask   = tf.cast(walls[0,:], tf.bool)
@@ -144,27 +150,33 @@ class BModel(keras.Model):
       uvBc   = tf.boolean_mask(uvBc, mask, axis=1)
       gVel   = self._getG(xy, xyBc, uvBc)
 
-      # (1.2) Construct function g for pressure bc
-      xyBc  = inputs[3]
-      xyBc += UT.imageOffset
-      xyBc /= UT.dimlessMax
-      pBc   = uvpBc[:,:,2:3] # [nBatch, nXyBc, 1]
+      # TODO: Disabling hard p for now
+      if 0:
+        # (1.2) Construct function g for pressure bc
+        xyBc  = inputs[3]
+        xyBc += UT.imageOffset
+        xyBc /= UT.dimlessMax
+        pBc   = uvpBc[:,:,2:3] # [nBatch, nXyBc, 1]
 
-      # Get all bc points where pressure bc is enfored (filter out other bc points)
-      walls = tf.cast(tf.equal(idsBc, 21), tf.float32) # top
-      mask  = tf.cast(walls[0,:], tf.bool)
-      xyBc  = tf.boolean_mask(xyBc, mask, axis=1)
-      pBc   = tf.boolean_mask(pBc, mask, axis=1)
-      gPres = self._getG(xy, xyBc, pBc)
+        # Get all bc points where pressure bc is enfored (filter out other bc points)
+        walls = tf.cast(tf.equal(idsBc, 21), tf.float32) # top
+        mask  = tf.cast(walls[0,:], tf.bool)
+        xyBc  = tf.boolean_mask(xyBc, mask, axis=1)
+        pBc   = tf.boolean_mask(pBc, mask, axis=1)
+        gPres = self._getG(xy, xyBc, pBc)
 
       # (2) Construct phi's. Zero in boundary cells, getting more positive at interior points
       # (2.1) Construct function phi for velocity bc
       #phiVel = x * (1-x) * y # Filter function for left, right, and bottom domain boundaries
       phiVel = self._getPhi(x, y, [1,1,1,1]) # Filter at left, right, and bottom domain boundaries
+      phiVel = tf.expand_dims(phiVel, axis=-1)
 
-      # (2.2) Construct function phi for pressure bc
-      #phiPres = (1-y)
-      phiPres = self._getPhi(x, y, [0,1,0,0]) # Filter at top domain boundary
+      # TODO: Disabling hard p for now
+      if 0:
+        # (2.2) Construct function phi for pressure bc
+        #phiPres = (1-y)
+        phiPres = self._getPhi(x, y, [0,1,0,0]) # Filter at top domain boundary
+        phiPres = tf.expand_dims(phiPres, axis=-1)
 
       withInitCond = 0
       if withInitCond:
@@ -173,8 +185,6 @@ class BModel(keras.Model):
 
       # Assemble g and phi with uvp
       uv, p, c = uvp[:,:2], uvp[:,2:3], uvp[:,3:4]
-      phiVel   = tf.expand_dims(phiVel, axis=-1)
-      phiPres  = tf.expand_dims(phiPres, axis=-1)
       uv       = gVel + uv * phiVel               # [nBatch, nDim]
       # TODO: Disabling hard p for now
       #p        = gPres + p * phiPres              # [nBatch, nDim]
@@ -266,12 +276,12 @@ class BModel(keras.Model):
     cMseInit = tf.reduce_sum(tf.square(cTrue - cPred) * initCondMask) / nInitCondPoint
 
     # Compute PDE loss
-    #colMask = tf.cast(tf.equal(w, 0), tf.float32)
-    #nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
-    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0))# * colMask) / nPdePoint
-    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1))# * colMask) / nPdePoint
-    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2))# * colMask) / nPdePoint
-    pdeMse3 = tf.reduce_sum(tf.square(pdeTrue - pde3))# * colMask) / nPdePoint
+    colMask = tf.cast(tf.equal(w, 0), tf.float32)
+    nPdePoint = tf.reduce_sum(colMask) + 1.0e-10
+    pdeMse0 = tf.reduce_sum(tf.square(pdeTrue - pde0) * colMask) / nPdePoint
+    pdeMse1 = tf.reduce_sum(tf.square(pdeTrue - pde1) * colMask) / nPdePoint
+    pdeMse2 = tf.reduce_sum(tf.square(pdeTrue - pde2) * colMask) / nPdePoint
+    pdeMse3 = tf.reduce_sum(tf.square(pdeTrue - pde3) * colMask) / nPdePoint
 
     # Compute domain wall loss for velocity
     wallMask = tf.cast(tf.equal(w, 20), tf.float32)  # left

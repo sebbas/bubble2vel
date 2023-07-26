@@ -58,6 +58,8 @@ parser.add_argument('-bs', '--batchSize', type=int, default=64,
 parser.add_argument('-restart', '--restart', default=False, action='store_true',
                     help='restart from checkpoint')
 parser.add_argument('-ckpnt', '--checkpoint', default=None, help='checkpoint name')
+parser.add_argument('-seq', '--sequential', default=False, action='store_true',
+                    help='Sequence-to-sequence training mode')
 
 # Learning rate
 parser.add_argument('-lr0', '--lr0', type=float, default=5e-4, help='init learning rate')
@@ -104,14 +106,14 @@ dataSet.prepare_hard_boundary_condition()
 # Ensure correct output size at end of input architecture
 args.architecture.append(UT.nDim + 2)
 
-withBatchResampling = 0
+withSeq2Seq = args.sequential
 
 # Create training and validation (data + collocation points)
 splitRatio = 0.9
 batchSize  = args.batchSize
 nFrames    = dataSet.get_num_frames()
 
-if withBatchResampling:
+if withSeq2Seq:
   nPointsPerFrame = args.nWallPoint + args.nColPoint + args.nIfacePoint + args.nIcondPoint
   assert args.nWallPoint > -1 and args.nColPoint > -1 and args.nIfacePoint > -1 and args.nIcondPoint > -1, "Must specify exact number of points per category"
 
@@ -152,14 +154,14 @@ if args.restart:
   if args.restartLr != None:
     keras.backend.set_value(bubbleNet.optimizer.learning_rate, args.restartLr)
 
-numIter = nFrames if withBatchResampling else 1
+numIter = nFrames if withSeq2Seq else 1
 
-for i in range(1, numIter+1):
+for i in range(numIter):
   # Sample selection of points
-  numFrames = i if withBatchResampling else nFrames
+  numFrames = (i+1) if withSeq2Seq else nFrames
   dataSet.prepare_batch_arrays(numFrames=numFrames, resetTime=True, zeroMean=False)
 
-  nSamples = nPointsPerFrame * i if withBatchResampling else dataSet.get_num_total_pts()
+  nSamples = nPointsPerFrame * (i+1) if withSeq2Seq else dataSet.get_num_total_pts()
   nTrain   = int(nSamples * splitRatio)
   # Ensure training samples fit evenly
   nTrain   = args.batchSize * round(nTrain / args.batchSize)

@@ -29,7 +29,8 @@ if args.source == UT.SRC_FLOWNET:
 elif args.source == UT.SRC_FLASHX:
   #fName = '../data/PB_simulation/384/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
   #fName = '../data/PB_simulation/SingleBubble/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
-  fName = '../../Multiphase-Simulations/simulation/PoolBoiling/SingleBubble/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
+  #fName = '../../Multiphase-Simulations/simulation/PoolBoiling/SingleBubble/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
+  fName = '/share/crsp/lab/amowli/sbarschk/SingleBubble/INS_Pool_Boiling_hdf5_plt_cnt_%04d'
 
 assert fName is not None, 'Invalid training data source'
 
@@ -43,7 +44,7 @@ isLoaded, filePrefix = dataSet.load_data(args.source)
 if not isLoaded: sys.exit()
 
 # Extract points from dataset and store in h5
-dataSet.extract_wall_points(useDataBc=False)
+dataSet.extract_wall_points(useDataBc=True)
 dataSet.extract_fluid_points(velEps=1.0)
 dataSet.save(filePrefix=filePrefix)
 dataSet.summary()

@@ -53,6 +53,7 @@ imageSize_fx = 384
 
 imageSize   = [96.0, 144.0]
 domainSize  = [4.0, 6.0]
+numFrames = 80
 Re = 303.0
 timeScale = 0.1
 posScale = [a / b for a, b in zip(imageSize, domainSize)]
@@ -61,6 +62,7 @@ posScale = posScale[0]
 dimlessSize = [(size-1) / posScale for size in imageSize]
 imageOffset = [(size-1)/2.0/posScale for size in imageSize] # used for scaling in hard bcs when zeromean is enabled
 dimlessMax = np.max(dimlessSize)
+timeMax = float(numFrames-1)
 
 
 def get_xy_scaled(xy):

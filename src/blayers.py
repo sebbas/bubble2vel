@@ -46,10 +46,10 @@ class DenseLayers(KL.Layer):
   def call(self, inputs):
     nLayers = len(self.layers)
 
-    # TODO: Normalize inputs
-    xNorm = inputs[:,0:1]
-    yNorm = inputs[:,1:2]
-    t = inputs[:,2:3]
+    # Normalize inputs and then shift to [-1, 1] range
+    xNorm = (inputs[:,0:1] / UT.dimlessMax) * 2 - 1
+    yNorm = (inputs[:,1:2] / UT.dimlessMax) * 2 - 1
+    t = inputs[:,2:3] / UT.timeMax
     xyt = KL.Concatenate(axis=-1)([xNorm, yNorm, t])
 
     uvp = self.layers[0](xyt)

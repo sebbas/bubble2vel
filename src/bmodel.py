@@ -62,7 +62,8 @@ class BModel(keras.Model):
     self.trainStat = {}
     self.validStat = {}
 
-
+    # Options for (ReLoBRaLo) loss balancer
+    self.usingReLoBRaLoLoss = 0
     alpha = 0.999
     temperature = 0.01
     rho = 0.99
@@ -70,13 +71,11 @@ class BModel(keras.Model):
     self.temperature = temperature
     self.rho = rho
     self.call_count = tf.Variable(0, trainable=False, dtype=tf.int16)
-
     # Using only uMse, vMse, pde0, pde1, pde2 for relobralo loss for now
-    self.numTerms = 5#len(self.alpha) + len(self.beta) + len(self.gamma)
+    self.numTerms = 5
     self.lambdas = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
     self.last_losses = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
     self.init_losses = [tf.Variable(1., trainable=False) for _ in range(self.numTerms)]
-
     self.iter0 = 0
     self.iter1 = 1
 
@@ -322,6 +321,52 @@ class BModel(keras.Model):
       return self.getRho1()
 
 
+  def _computeRelobraloLoss(self, losses, eps=1e-7):
+    # in first iteration (self.call_count == 0), drop lambda_hat and use init lambdas, i.e. lambda = 1
+    #   i.e. alpha = 1 and rho = 1
+    # in second iteration (self.call_count == 1), drop init lambdas and use only lambda_hat
+    #   i.e. alpha = 0 and rho = 1
+    # afterwards, default procedure (see paper)
+    #   i.e. alpha = self.alpha and rho = Bernoully random variable with p = self.rho
+    #alpha = tf.cond(tf.equal(self.call_count, 0),
+    #        lambda: 1.,
+    #        lambda: tf.cond(tf.equal(self.call_count, 1),
+    #                        lambda: 0.,
+    #                        lambda: self.alpha))
+
+    alpha = self.getAlpha()
+    rho = self.getRho()
+
+    # compute new lambdas w.r.t. the losses in the previous iteration
+    lambdas_hat = [losses[i] / (self.last_losses[i] * self.temperature + eps) for i in range(len(losses))]
+    lambdas_hat = tf.nn.softmax(lambdas_hat - tf.reduce_max(lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
+
+    # compute new lambdas w.r.t. the losses in the first iteration
+    init_lambdas_hat = [losses[i] / (self.init_losses[i] * self.temperature + eps) for i in range(len(losses))]
+    init_lambdas_hat = tf.nn.softmax(init_lambdas_hat - tf.reduce_max(init_lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
+
+    # use rho for deciding, whether a random lookback should be performed
+    new_lambdas = [(rho * alpha * self.lambdas[i] + (1 - rho) * alpha * init_lambdas_hat[i] + (1 - alpha) * lambdas_hat[i]) for i in range(len(losses))]
+    for var, lam in zip(self.lambdas, new_lambdas):
+      var.assign(tf.stop_gradient(lam))
+
+    # store current losses in self.last_losses to be accessed in the next iteration
+    for var, loss in zip(self.last_losses, losses):
+      var.assign(tf.stop_gradient(loss))
+
+    # in first iteration, store losses in self.init_losses to be accessed in next iterations
+    first_iteration = tf.cast(self.call_count < self.iter1, dtype=tf.float32)
+    for var, loss in zip(self.init_losses, losses):
+      var.assign(tf.stop_gradient(loss * first_iteration + var * (1 - first_iteration)))
+
+    # compute weighted loss
+    loss = tf.reduce_sum([lam * loss for lam, loss in zip(self.lambdas, losses)])
+
+    #tf.print(self.lambdas)
+    self.call_count.assign_add(1)
+    return loss
+
+
   #@tf.function
   def train_step(self, data):
     # A batch of points has ...
@@ -341,60 +386,14 @@ class BModel(keras.Model):
       uvpPred, uMse, vMse, pMse, cMse, pdeMse0, pdeMse1, pdeMse2, pdeMse3, uMseWalls, vMseWalls, pMseWalls, uMseInit, vMseInit, cMseInit = \
         self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
 
-      #tf.print(len(self.trainable_variables))
-
-      usingReLoBRaLoLoss = 0
-      if usingReLoBRaLoLoss:
+      if self.usingReLoBRaLoLoss:
         losses = [uMse, vMse, pdeMse0, pdeMse1, pdeMse2]
-
-        EPS = 1e-7
-        # in first iteration (self.call_count == 0), drop lambda_hat and use init lambdas, i.e. lambda = 1
-        #   i.e. alpha = 1 and rho = 1
-        # in second iteration (self.call_count == 1), drop init lambdas and use only lambda_hat
-        #   i.e. alpha = 0 and rho = 1
-        # afterwards, default procedure (see paper)
-        #   i.e. alpha = self.alpha and rho = Bernoully random variable with p = self.rho
-        #alpha = tf.cond(tf.equal(self.call_count, 0),
-        #        lambda: 1.,
-        #        lambda: tf.cond(tf.equal(self.call_count, 1),
-        #                        lambda: 0.,
-        #                        lambda: self.alpha))
-
-        alpha = self.getAlpha()
-        rho = self.getRho()
-
-        # compute new lambdas w.r.t. the losses in the previous iteration
-        lambdas_hat = [losses[i] / (self.last_losses[i] * self.temperature + EPS) for i in range(len(losses))]
-        lambdas_hat = tf.nn.softmax(lambdas_hat - tf.reduce_max(lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
-
-        # compute new lambdas w.r.t. the losses in the first iteration
-        init_lambdas_hat = [losses[i] / (self.init_losses[i] * self.temperature + EPS) for i in range(len(losses))]
-        init_lambdas_hat = tf.nn.softmax(init_lambdas_hat - tf.reduce_max(init_lambdas_hat)) * tf.cast(len(losses), dtype=tf.float32)
-
-        # use rho for deciding, whether a random lookback should be performed
-        new_lambdas = [(rho * alpha * self.lambdas[i] + (1 - rho) * alpha * init_lambdas_hat[i] + (1 - alpha) * lambdas_hat[i]) for i in range(len(losses))]
-        for var, lam in zip(self.lambdas, new_lambdas):
-          var.assign(tf.stop_gradient(lam))
-
-        # store current losses in self.last_losses to be accessed in the next iteration
-        for var, loss in zip(self.last_losses, losses):
-          var.assign(tf.stop_gradient(loss))
-
-        # in first iteration, store losses in self.init_losses to be accessed in next iterations
-        first_iteration = tf.cast(self.call_count < self.iter1, dtype=tf.float32)
-        for var, loss in zip(self.init_losses, losses):
-          var.assign(tf.stop_gradient(loss * first_iteration + var * (1 - first_iteration)))
-
-        # compute weighted loss
-        loss = tf.reduce_sum([lam * loss for lam, loss in zip(self.lambdas, losses)])
-
-        #tf.print(self.lambdas)
-        self.call_count.assign_add(1)
+        loss = self._computeRelobraloLoss(losses)
       else:
-        loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse + self.alpha[3]*cMse \
-                + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 + self.beta[3]*pdeMse3 \
-                + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
-                + self.delta[0]*uMseInit + self.delta[1]*vMseInit + self.delta[2]*cMseInit)
+        loss = ( self.alpha[0]*uMse + self.alpha[1]*vMse + self.alpha[2]*pMse + self.alpha[3]*cMse \
+               + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 + self.beta[3]*pdeMse3 \
+               + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
+               + self.delta[0]*uMseInit + self.delta[1]*vMseInit + self.delta[2]*cMseInit)
 
       loss += tf.add_n(self.losses)
     # update gradients
@@ -476,14 +475,17 @@ class BModel(keras.Model):
     w       = data[0][6]
     phi     = data[0][7]
 
-    # Compute the data and pde losses
     uvpPred, uMse, vMse, pMse, cMse, pdeMse0, pdeMse1, pdeMse2, pdeMse3, uMseWalls, vMseWalls, pMseWalls, uMseInit, vMseInit, cMseInit = \
       self.compute_losses(xy, t, w, phi, uv, xyBc, uvpBc, validBc)
-    # replica's loss, divided by global batch size
-    loss  = ( self.alpha[0]*uMse   + self.alpha[1]*vMse + self.alpha[2]*pMse + self.alpha[3]*cMse \
-            + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 + self.beta[3]*pdeMse3 \
-            + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
-            + self.delta[0]*uMseInit + self.delta[1]*vMseInit + self.delta[2]*cMseInit)
+
+    if self.usingReLoBRaLoLoss:
+      losses = [uMse, vMse, pdeMse0, pdeMse1, pdeMse2]
+      loss = tf.reduce_sum([lam * ls for lam, ls in zip(self.lambdas, losses)])
+    else:
+      loss = ( self.alpha[0]*uMse + self.alpha[1]*vMse + self.alpha[2]*pMse + self.alpha[3]*cMse \
+             + self.beta[0]*pdeMse0 + self.beta[1]*pdeMse1 + self.beta[2]*pdeMse2 + self.beta[3]*pdeMse3 \
+             + self.gamma[0]*uMseWalls + self.gamma[1]*vMseWalls + self.gamma[2]*pMseWalls \
+             + self.delta[0]*uMseInit + self.delta[1]*vMseInit + self.delta[2]*cMseInit)
 
     # Track loss and mae
     self.validMetrics['loss'].update_state(loss)
